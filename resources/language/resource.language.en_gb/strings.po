@@ -1,0 +1,56 @@
+# Torus language file
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.torus\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en_GB\n"
+
+msgctxt "#30000"
+msgid "Sources"
+msgstr ""
+
+msgctxt "#30001"
+msgid "Source provider"
+msgstr ""
+
+msgctxt "#30002"
+msgid "Quality profile"
+msgstr ""
+
+msgctxt "#30003"
+msgid "Advanced"
+msgstr ""
+
+msgctxt "#30004"
+msgid "Route posters via proxy (fixes ISP-blocked images)"
+msgstr ""
+
+msgctxt "#30005"
+msgid "TMDB API key (optional override)"
+msgstr ""
+
+msgctxt "#30006"
+msgid "TorBox API key (optional manual override)"
+msgstr ""
+
+msgctxt "#30010"
+msgid "Comet (public)"
+msgstr ""
+
+msgctxt "#30011"
+msgid "Torrentio (public)"
+msgstr ""
+
+msgctxt "#30012"
+msgid "Cinephile (4K/DV/REMUX, best quality)"
+msgstr ""
+
+msgctxt "#30013"
+msgid "Balanced (1 link per quality)"
+msgstr ""
+
+msgctxt "#30014"
+msgid "Data Saver (1080p, smallest)"
+msgstr ""

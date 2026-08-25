@@ -1,70 +1,74 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <!--
   Kodi 21 (Omega) settings, version="1".
-  No key typing required: TorBox is linked in-addon via device code (Home >
-  "Link your TorBox account"), and TMDB uses a bundled key. The fields here are
-  dropdowns plus an optional advanced TMDB override for power users.
+  Labels reference numeric string IDs from
+  resources/language/resource.language.en_gb/strings.po — literal text labels do
+  not render reliably in Kodi's settings UI.
+
+  No key typing required for normal use: TorBox is linked in-addon via device code
+  (Home > "Link your TorBox account"), and TMDB uses a bundled key. The fields
+  below are dropdowns/toggles plus optional advanced overrides.
 -->
 <settings version="1">
     <section id="plugin.video.torus">
 
-        <category id="sources" label="Sources">
+        <category id="sources" label="30000">
             <group id="1">
-                <setting id="provider" type="string" label="Source provider">
+                <setting id="provider" type="string" label="30001">
                     <level>0</level>
                     <default>comet</default>
                     <constraints>
                         <options>
-                            <option label="Comet (public)">comet</option>
-                            <option label="Torrentio (public)">torrentio</option>
+                            <option label="30010">comet</option>
+                            <option label="30011">torrentio</option>
                         </options>
                     </constraints>
                     <control type="list" format="string">
-                        <heading>Source provider</heading>
+                        <heading>30001</heading>
                     </control>
                 </setting>
-                <setting id="quality_profile" type="string" label="Quality profile">
+                <setting id="quality_profile" type="string" label="30002">
                     <level>0</level>
                     <default>cinephile</default>
                     <constraints>
                         <options>
-                            <option label="Cinephile (4K/DV/REMUX, best quality)">cinephile</option>
-                            <option label="Balanced (1 link per quality)">balanced</option>
-                            <option label="Data Saver (1080p, smallest)">datasaver</option>
+                            <option label="30012">cinephile</option>
+                            <option label="30013">balanced</option>
+                            <option label="30014">datasaver</option>
                         </options>
                     </constraints>
                     <control type="list" format="string">
-                        <heading>Quality profile</heading>
+                        <heading>30002</heading>
                     </control>
                 </setting>
             </group>
         </category>
 
-        <category id="advanced" label="Advanced">
+        <category id="advanced" label="30003">
             <group id="1">
-                <setting id="image_proxy" type="boolean" label="Route posters via proxy (fixes ISP-blocked images)">
+                <setting id="image_proxy" type="boolean" label="30004">
                     <level>0</level>
                     <default>true</default>
                     <control type="toggle"/>
                 </setting>
-                <setting id="tmdb_api_key" type="string" label="TMDB API key (optional override)">
+                <setting id="tmdb_api_key" type="string" label="30005">
                     <level>0</level>
                     <default></default>
                     <constraints>
                         <allowempty>true</allowempty>
                     </constraints>
                     <control type="edit" format="string">
-                        <heading>TMDB API key (optional override)</heading>
+                        <heading>30005</heading>
                     </control>
                 </setting>
-                <setting id="torbox_api_key" type="string" label="TorBox API key (optional manual override)">
+                <setting id="torbox_api_key" type="string" label="30006">
                     <level>0</level>
                     <default></default>
                     <constraints>
                         <allowempty>true</allowempty>
                     </constraints>
                     <control type="edit" format="string">
-                        <heading>TorBox API key (optional manual override)</heading>
+                        <heading>30006</heading>
                     </control>
                 </setting>
             </group>

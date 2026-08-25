@@ -17,7 +17,7 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
-from resources.lib import auth, config, tmdb
+from resources.lib import auth, config, providers, ranking, tmdb
 from resources.lib.http import HttpError, log
 from resources.lib.kodi import listing
 
@@ -123,10 +123,11 @@ def _render_results(kind: str, results: list) -> None:
 
 def movie_detail(tmdb_id: int) -> None:
     detail = tmdb.movie_detail(tmdb_id)
-    # The selected movie itself, with a Play placeholder (real play arrives M3).
-    main = listing.movie_item(detail)
-    main.setLabel(f"▶ Play — {detail.get('title', '')} (coming in M3)")
-    add_item(main, False, action="noop")
+    imdb = detail.get("external_ids", {}).get("imdb_id", "")
+    # Find playable TorBox-cached sources for this movie.
+    find = listing.movie_item(detail)
+    find.setLabel(f"▶  Find sources — {detail.get('title', '')}")
+    add_item(find, True, action="sources", imdb=imdb, mtype="movie")
     # Similar titles, browsable.
     for movie in detail.get("similar", {}).get("results", []):
         add_item(listing.movie_item(movie), True,
@@ -145,12 +146,47 @@ def tv_detail(tmdb_id: int) -> None:
 
 def season(tmdb_id: int, season_number: int) -> None:
     show = tmdb.tv_detail(tmdb_id)
+    imdb = show.get("external_ids", {}).get("imdb_id", "")
     data = tmdb.tv_season(tmdb_id, season_number)
     for episode in data.get("episodes", []):
         item = listing.episode_item(show, episode)
-        item.setLabel(f"{item.getLabel()}  (Play — coming in M3)")
-        add_item(item, False, action="noop")
+        add_item(item, True, action="sources", imdb=imdb, mtype="series",
+                 season=season_number, episode=episode.get("episode_number", 0))
     finish("episodes")
+
+
+def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> None:
+    if not imdb:
+        notify("No IMDb id found for this title")
+        finish()
+        return
+    if not config.torbox_token():
+        notify("Link your TorBox account first")
+        finish()
+        return
+
+    provider = providers.get_provider()
+    streams = ranking.rank(
+        provider.search(imdb, mtype, season_number, episode_number)
+    )
+    if not streams:
+        notify("No cached sources found")
+
+    for stream in streams:
+        bits = [b for b in (stream.quality, stream.size) if b]
+        prefix = f"[{' · '.join(bits)}] " if bits else ""
+        item = xbmcgui.ListItem(label=f"{prefix}{stream.title}")
+        item.setProperty("IsPlayable", "true")
+        tag = item.getVideoInfoTag()
+        tag.setMediaType("movie" if mtype == "movie" else "episode")
+        tag.setTitle(stream.title)
+        add_item(item, False, action="play", url=stream.url)
+    finish()
+
+
+def play(url: str) -> None:
+    item = xbmcgui.ListItem(path=url)
+    xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
 
 def placeholder(title: str) -> None:
@@ -184,6 +220,15 @@ def router(query_string: str) -> None:
         tv_detail(int(params["tmdb_id"]))
     elif action == "season":
         season(int(params["tmdb_id"]), int(params["season"]))
+    elif action == "sources":
+        sources(
+            params.get("imdb", ""),
+            params.get("mtype", "movie"),
+            int(params["season"]) if params.get("season") else None,
+            int(params["episode"]) if params.get("episode") else None,
+        )
+    elif action == "play":
+        play(params["url"])
     elif action == "auth_torbox":
         auth.run_device_auth()
         xbmc.executebuiltin("Container.Refresh")

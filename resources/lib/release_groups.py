@@ -7,6 +7,8 @@ given quality bracket — without ever overriding resolution or source.
 
 Credit: the group tier lists are maintained by the TRaSH Guides community.
 """
+
+from __future__ import annotations
 import re
 
 # category -> tier -> [group names], verbatim from TRaSH Guides (English general).

@@ -7,6 +7,8 @@ the resolver itself), then connect straight to the real IP with correct SNI and
 full certificate validation. This makes the addon work behind ISP DNS blocks
 with zero network configuration.
 """
+
+from __future__ import annotations
 import http.client
 import json
 import os

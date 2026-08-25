@@ -6,6 +6,8 @@ lower ones:
     >>  HDR/Dolby Vision  >>  lossless audio
 Junk (CAM/TS) is pushed to the bottom. M4 will layer configurable profiles on top.
 """
+
+from __future__ import annotations
 import re
 
 from . import release_groups

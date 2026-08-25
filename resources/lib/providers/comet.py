@@ -4,6 +4,8 @@ Comet takes a base64(JSON) config with the user's TorBox key and returns cached,
 already-resolved streams for an IMDb id. Its stream `url` is a Comet playback
 link that redirects to the actual TorBox stream, so it's handed straight to Kodi.
 """
+
+from __future__ import annotations
 import base64
 import json
 import re

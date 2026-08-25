@@ -4,6 +4,8 @@ Keyed on IMDb id (+ season/episode), never on the torrent hash, so a different
 cached release next time still resumes at the right spot. Stores name/poster too
 so the Continue Watching row renders without extra metadata calls.
 """
+
+from __future__ import annotations
 import os
 import sqlite3
 import time

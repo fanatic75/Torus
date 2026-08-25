@@ -3,6 +3,8 @@
 Uses the Kodi 21 (Omega) InfoTagVideo setters. Rich art + metadata here is what
 lets a good skin render Stremio-like poster rows without custom UI code.
 """
+
+from __future__ import annotations
 import xbmcgui
 
 from .. import cinemeta

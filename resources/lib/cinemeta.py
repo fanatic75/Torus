@@ -7,6 +7,8 @@ backend Stremio itself uses.
 Catalogs (per type movie|series): top (Popular), imdbRating (Top Rated),
 year (New). Each supports genre / search / skip.
 """
+
+from __future__ import annotations
 import urllib.parse
 
 from . import config

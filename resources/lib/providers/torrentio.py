@@ -5,6 +5,8 @@ TorBox results only (`debridoptions=nodownloadlinks` + filtering on the `[TB+]`
 marker). The stream `url` is a Torrentio resolve link that redirects to the
 TorBox stream.
 """
+
+from __future__ import annotations
 import re
 
 from ..http import get_json

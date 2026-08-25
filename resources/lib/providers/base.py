@@ -4,6 +4,8 @@ A Provider turns a title (IMDb id, optionally season/episode) into a list of
 playable Stream objects. Today: Comet. Later: Torrentio, StremThru, self-hosted
 instances — all behind this same shape, so the rest of the addon never changes.
 """
+
+from __future__ import annotations
 from dataclasses import dataclass
 
 

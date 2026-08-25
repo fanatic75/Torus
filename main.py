@@ -9,6 +9,8 @@ Stateless request/response: parse the action, build a listing, endOfDirectory,
 exit. Metadata is Cinemeta (keyless, IMDb-keyed); sources come from the provider
 layer (Comet) and play via setResolvedUrl.
 """
+
+from __future__ import annotations
 import json
 import sys
 from urllib.parse import urlencode, parse_qsl

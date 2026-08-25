@@ -4,6 +4,8 @@ The default queries Comet and Torrentio concurrently and merges their results,
 deduped by release filename. This both widens coverage and is resilient: if one
 host is slow or down, the other's results still come through.
 """
+
+from __future__ import annotations
 import concurrent.futures
 import re
 

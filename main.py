@@ -145,12 +145,31 @@ def season(imdb: str, season_number: int) -> None:
     for video in episodes:
         episode_number = video.get("episode", 0)
         item = listing.episode_item(meta, video)
-        item.setProperty("IsPlayable", "true")
         item.addContextMenuItems(
             _choose_source_ctx(imdb, "series", season_number, episode_number))
-        add_item(item, False, action="play", imdb=imdb, mtype="series",
+        add_item(item, True, action="episode", imdb=imdb,
                  season=season_number, episode=episode_number)
     finish("episodes")
+
+
+def episode(imdb: str, season_number: int, episode_number: int) -> None:
+    """Per-episode actions: one-click Play (best source) + Choose source."""
+    meta = cinemeta.meta("series", imdb)
+    video = next((v for v in meta.get("videos", [])
+                  if v.get("season") == season_number and v.get("episode") == episode_number), {})
+    tag_line = f"S{season_number:02d}E{episode_number:02d}"
+    title = video.get("name", "")
+
+    play = listing.episode_item(meta, video) if video else xbmcgui.ListItem(label="Play")
+    play.setLabel(f"▶  Play — {tag_line}" + (f"  {title}" if title else ""))
+    play.setProperty("IsPlayable", "true")
+    add_item(play, False, action="play", imdb=imdb, mtype="series",
+             season=season_number, episode=episode_number)
+
+    choose = xbmcgui.ListItem(label="☰  Choose source")
+    add_item(choose, True, action="sources", imdb=imdb, mtype="series",
+             season=season_number, episode=episode_number)
+    finish()
 
 
 def continue_watching() -> None:
@@ -277,6 +296,8 @@ def router(query_string: str) -> None:
         detail(params["imdb"], params["mtype"])
     elif action == "season":
         season(params["imdb"], int(params["season"]))
+    elif action == "episode":
+        episode(params["imdb"], int(params["season"]), int(params["episode"]))
     elif action == "sources":
         sources(
             params.get("imdb", ""),

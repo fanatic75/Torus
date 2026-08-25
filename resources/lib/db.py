@@ -130,11 +130,17 @@ def prune(max_age_days: int = RETENTION_DAYS) -> int:
 def list_continue(limit=40) -> list[dict]:
     conn = _connect()
     try:
+        # One entry per title (imdb): the most-recently-watched episode/movie that
+        # isn't effectively finished, plus any queued "next up".
         rows = conn.execute("""
             SELECT imdb, mtype, season, episode, position, duration, name, poster, nextup
-            FROM progress
-            WHERE nextup = 1
-               OR (duration > 0 AND (position / duration) BETWEEN 0.02 AND 0.9)
+            FROM progress p
+            WHERE (nextup = 1 OR (duration > 0 AND (position / duration) < 0.95))
+              AND updated_at = (
+                  SELECT MAX(updated_at) FROM progress p2
+                  WHERE p2.imdb = p.imdb
+                    AND (p2.nextup = 1 OR (p2.duration > 0 AND (p2.position / p2.duration) < 0.95))
+              )
             ORDER BY updated_at DESC
             LIMIT ?
         """, (limit,)).fetchall()

@@ -194,7 +194,7 @@ def write_addons_xml(build_parent: str) -> None:
     md5 = hashlib.md5(xml.encode("utf-8")).hexdigest()
     with open(os.path.join(repo_dir, "addons.xml.md5"), "w", encoding="utf-8") as fh:
         fh.write(md5)
-    print(f"  wrote repo/addons.xml (md5 {md5})")
+    print(f"  wrote docs/addons.xml (md5 {md5})")
 
 
 def write_index_html(version: str) -> None:

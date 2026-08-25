@@ -159,6 +159,8 @@ def continue_watching() -> None:
         label = row.get("name") or row["imdb"]
         if row.get("mtype") == "series" and row.get("episode"):
             label = f"{label}  S{row['season']:02d}E{row['episode']:02d}"
+        if row.get("nextup"):
+            label = f"▶ Up Next — {label}"
         item = xbmcgui.ListItem(label=label)
         item.setArt({"poster": poster, "thumb": poster})
         item.setProperty("IsPlayable", "true")

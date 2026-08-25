@@ -24,15 +24,18 @@ def _connect() -> sqlite3.Connection:
             name TEXT DEFAULT '',
             poster TEXT DEFAULT '',
             url TEXT DEFAULT '',
+            nextup INTEGER DEFAULT 0,
             updated_at INTEGER NOT NULL,
             PRIMARY KEY (imdb, season, episode)
         )
     """)
-    # Migrate older DBs that predate the url column.
-    try:
-        conn.execute("ALTER TABLE progress ADD COLUMN url TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass
+    # Migrate older DBs that predate newer columns.
+    for column, ddl in (("url", "url TEXT DEFAULT ''"),
+                        ("nextup", "nextup INTEGER DEFAULT 0")):
+        try:
+            conn.execute(f"ALTER TABLE progress ADD COLUMN {ddl}")
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 
@@ -43,8 +46,8 @@ def save_progress(imdb, mtype, season, episode, position, duration,
     try:
         conn.execute("""
             INSERT INTO progress
-                (imdb, mtype, season, episode, position, duration, name, poster, url, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (imdb, mtype, season, episode, position, duration, name, poster, url, nextup, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             ON CONFLICT(imdb, season, episode) DO UPDATE SET
                 position=excluded.position,
                 duration=excluded.duration,
@@ -52,9 +55,30 @@ def save_progress(imdb, mtype, season, episode, position, duration,
                 name=COALESCE(NULLIF(excluded.name, ''), progress.name),
                 poster=COALESCE(NULLIF(excluded.poster, ''), progress.poster),
                 url=COALESCE(NULLIF(excluded.url, ''), progress.url),
+                nextup=0,
                 updated_at=excluded.updated_at
         """, (imdb, mtype, season, episode, position, duration, name, poster, url,
               int(time.time())))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_next_up(imdb, mtype, season, episode, name="", poster="") -> None:
+    """Queue the next episode of a series in Continue Watching (not yet started)."""
+    season, episode = int(season or 0), int(episode or 0)
+    conn = _connect()
+    try:
+        conn.execute("""
+            INSERT INTO progress
+                (imdb, mtype, season, episode, position, duration, name, poster, url, nextup, updated_at)
+            VALUES (?, ?, ?, ?, 0, 0, ?, ?, '', 1, ?)
+            ON CONFLICT(imdb, season, episode) DO UPDATE SET
+                nextup=1, position=0, duration=0,
+                name=COALESCE(NULLIF(excluded.name, ''), progress.name),
+                poster=COALESCE(NULLIF(excluded.poster, ''), progress.poster),
+                updated_at=excluded.updated_at
+        """, (imdb, mtype, season, episode, name, poster, int(time.time())))
         conn.commit()
     finally:
         conn.close()
@@ -107,13 +131,15 @@ def list_continue(limit=40) -> list[dict]:
     conn = _connect()
     try:
         rows = conn.execute("""
-            SELECT imdb, mtype, season, episode, position, duration, name, poster
+            SELECT imdb, mtype, season, episode, position, duration, name, poster, nextup
             FROM progress
-            WHERE duration > 0 AND (position / duration) BETWEEN 0.02 AND 0.9
+            WHERE nextup = 1
+               OR (duration > 0 AND (position / duration) BETWEEN 0.02 AND 0.9)
             ORDER BY updated_at DESC
             LIMIT ?
         """, (limit,)).fetchall()
     finally:
         conn.close()
-    keys = ("imdb", "mtype", "season", "episode", "position", "duration", "name", "poster")
+    keys = ("imdb", "mtype", "season", "episode", "position", "duration",
+            "name", "poster", "nextup")
     return [dict(zip(keys, row)) for row in rows]

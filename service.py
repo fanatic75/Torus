@@ -6,6 +6,7 @@ periodically and on pause/stop persists the play position to SQLite (keyed by
 IMDb id, never the torrent). That's what powers Resume and Continue Watching.
 """
 import json
+from urllib.parse import urlencode
 
 import xbmc
 import xbmcgui
@@ -14,6 +15,7 @@ from resources.lib import cinemeta, config, db
 
 PLAYING_PROP = "torus.playing"
 HOME = 10000  # Kodi Home window; properties here persist for the session.
+PLUGIN = "plugin://plugin.video.torus/"
 
 
 class TorusPlayer(xbmc.Player):
@@ -22,6 +24,7 @@ class TorusPlayer(xbmc.Player):
         self.identity = None
         self.name = ""
         self.poster = ""
+        self.advanced = False  # have we already marked this item finished?
 
     def _read_identity(self):
         raw = xbmcgui.Window(HOME).getProperty(PLAYING_PROP)
@@ -33,6 +36,7 @@ class TorusPlayer(xbmc.Player):
     def onAVStarted(self):
         self.identity = self._read_identity()
         self.name, self.poster = "", ""
+        self.advanced = False
         if self.identity:
             # Fetch title/poster once so Continue Watching renders without extra calls.
             try:
@@ -52,13 +56,54 @@ class TorusPlayer(xbmc.Player):
             return
         if duration <= 0:
             return
-        i = self.identity
-        if position / duration > 0.9:  # effectively finished -> drop from Continue Watching
-            db.clear_progress(i["imdb"], i.get("season", 0), i.get("episode", 0))
+        if position / duration > 0.9:  # effectively finished
+            if not self.advanced:
+                self._advance()
         else:
+            i = self.identity
             db.save_progress(i["imdb"], i["mtype"], i.get("season", 0),
                              i.get("episode", 0), position, duration,
                              self.name, self.poster, i.get("url", ""))
+
+    def _next_episode(self, identity):
+        """Return the next episode after the current one, or None."""
+        if not identity or identity.get("mtype") != "series":
+            return None
+        try:
+            meta = cinemeta.meta("series", identity["imdb"])
+        except Exception:  # noqa: BLE001
+            return None
+        current = (identity.get("season", 0), identity.get("episode", 0))
+        episodes = sorted(
+            ((v.get("season", 0), v.get("episode", 0)) for v in meta.get("videos", [])
+             if v.get("season", 0) and v.get("season", 0) > 0))
+        for season, episode in episodes:
+            if (season, episode) > current:
+                return {"imdb": identity["imdb"], "mtype": "series",
+                        "season": season, "episode": episode,
+                        "name": meta.get("name", ""),
+                        "poster": cinemeta.image(meta.get("poster"))}
+        return None
+
+    def _advance(self):
+        """Mark the current item finished; queue the next episode if it's a series."""
+        i = self.identity
+        db.clear_progress(i["imdb"], i.get("season", 0), i.get("episode", 0))
+        self.advanced = True
+        nxt = self._next_episode(i)
+        if nxt:
+            db.set_next_up(nxt["imdb"], "series", nxt["season"], nxt["episode"],
+                           nxt["name"], nxt["poster"])
+        return nxt
+
+    def _prompt_next(self, nxt):
+        label = "S%02dE%02d" % (nxt["season"], nxt["episode"])
+        message = f"Play {nxt.get('name', '')}  {label}?"
+        if xbmcgui.Dialog().yesno("Up Next", message, yeslabel="Play",
+                                  nolabel="Not now", autoclose=20000):
+            query = urlencode({"action": "play", "imdb": nxt["imdb"], "mtype": "series",
+                               "season": nxt["season"], "episode": nxt["episode"]})
+            xbmc.executebuiltin(f"PlayMedia({PLUGIN}?{query})")
 
     def onPlayBackPaused(self):
         self.save()
@@ -69,10 +114,10 @@ class TorusPlayer(xbmc.Player):
 
     def onPlayBackEnded(self):
         if self.identity:
-            db.clear_progress(self.identity["imdb"],
-                              self.identity.get("season", 0),
-                              self.identity.get("episode", 0))
-        self.identity = None
+            nxt = self._advance() if not self.advanced else self._next_episode(self.identity)
+            self.identity = None
+            if nxt:
+                self._prompt_next(nxt)
 
 
 def main() -> None:

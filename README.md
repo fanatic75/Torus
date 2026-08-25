@@ -26,6 +26,8 @@ TorBox and a home-theater box (CoreELEC / AM6B+).
   › **release-group tier** › HDR/Dolby Vision › lossless audio.
 - **Resume + Continue Watching**, keyed by IMDb id (never the torrent), so it survives torrents
   rotating out of cache. Resume reuses the exact source for a fast, position-accurate restart.
+- **TV Up Next.** Finishing an episode advances the show in Continue Watching to the next episode
+  (across season boundaries), and offers a "Play next?" prompt as each episode ends.
 - **Works behind ISP DNS blocks** (e.g. Jio/Airtel blocking metadata hosts in India) with zero
   network config — hosts are resolved over DoH and images proxied.
 

@@ -54,3 +54,11 @@ msgstr ""
 msgctxt "#30014"
 msgid "Data Saver (1080p, smallest)"
 msgstr ""
+
+msgctxt "#30020"
+msgid "Auto-delete old resume points"
+msgstr ""
+
+msgctxt "#30021"
+msgid "Delete resume points untouched for (days)"
+msgstr ""

@@ -10,7 +10,7 @@ import json
 import xbmc
 import xbmcgui
 
-from resources.lib import cinemeta, db
+from resources.lib import cinemeta, config, db
 
 PLAYING_PROP = "torus.playing"
 HOME = 10000  # Kodi Home window; properties here persist for the session.
@@ -80,9 +80,29 @@ def main() -> None:
     player = TorusPlayer()
     xbmc.log("[Torus] service started", xbmc.LOGINFO)
 
+    # Prune only if the user enabled it; otherwise keep everything (Continue
+    # Watching just shows the 40 most recent). Runs at startup + ~daily.
+    def maybe_prune():
+        if not config.prune_enabled():
+            return
+        try:
+            removed = db.prune(config.prune_days())
+            if removed:
+                xbmc.log(f"[Torus] pruned {removed} old resume points", xbmc.LOGINFO)
+        except Exception as exc:  # noqa: BLE001
+            xbmc.log(f"[Torus] prune failed: {exc}", xbmc.LOGDEBUG)
+
+    day_seconds = 24 * 60 * 60
+    elapsed = 0
+    maybe_prune()
+
     while not monitor.abortRequested():
         if player.isPlaying() and player.identity:
             player.save()
+        elapsed += 15
+        if elapsed >= day_seconds:
+            elapsed = 0
+            maybe_prune()
         if monitor.waitForAbort(15):
             break
 

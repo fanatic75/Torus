@@ -77,6 +77,25 @@ def clear_progress(imdb, season=0, episode=0) -> None:
         conn.close()
 
 
+RETENTION_DAYS = 365
+
+
+def prune(max_age_days: int = RETENTION_DAYS) -> int:
+    """Drop resume points not touched in a long time (abandoned watches).
+
+    The table is tiny (~0.3 KB/row), so this is hygiene, not a space necessity.
+    Returns the number of rows removed.
+    """
+    cutoff = int(time.time()) - max_age_days * 86400
+    conn = _connect()
+    try:
+        cur = conn.execute("DELETE FROM progress WHERE updated_at < ?", (cutoff,))
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def list_continue(limit=40) -> list[dict]:
     conn = _connect()
     try:

@@ -51,6 +51,25 @@
                     <default>true</default>
                     <control type="toggle"/>
                 </setting>
+                <setting id="prune_enabled" type="boolean" label="30020">
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle"/>
+                </setting>
+                <setting id="prune_days" type="integer" label="30021">
+                    <level>0</level>
+                    <default>365</default>
+                    <constraints>
+                        <minimum>1</minimum>
+                        <maximum>3650</maximum>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="prune_enabled">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="integer">
+                        <heading>30021</heading>
+                    </control>
+                </setting>
                 <setting id="tmdb_api_key" type="string" label="30005">
                     <level>0</level>
                     <default></default>

@@ -107,3 +107,16 @@ def image_proxy() -> bool:
     """Route poster/backdrop images through a proxy so ISP-blocked image hosts
     (e.g. image.tmdb.org behind Jio) still load in Kodi's image loader."""
     return get("image_proxy", "true").lower() != "false"
+
+
+def prune_enabled() -> bool:
+    """When off (default), resume points are kept forever (Continue Watching just
+    shows the 40 most recent). When on, prune after `prune_days`."""
+    return get("prune_enabled", "false").lower() == "true"
+
+
+def prune_days() -> int:
+    try:
+        return max(1, int(get("prune_days", "365")))
+    except (TypeError, ValueError):
+        return 365

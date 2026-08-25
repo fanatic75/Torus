@@ -7,12 +7,12 @@
 -->
 <addon id="plugin.video.torus"
        name="Torus"
-       version="0.7.0"
+       version="0.7.1"
        provider-name="Prateek Banga">
 
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
-        <!-- Networking deps (requests) get added in M1 when we start hitting TMDB/providers. -->
+        <!-- No external deps: metadata (Cinemeta) and providers are reached with stdlib HTTP. -->
     </requires>
 
     <!-- The browse/play UI. Kodi calls main.py with a query string; it renders a listing. -->

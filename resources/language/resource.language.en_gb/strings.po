@@ -23,10 +23,6 @@ msgctxt "#30004"
 msgid "Route posters via proxy (fixes ISP-blocked images)"
 msgstr ""
 
-msgctxt "#30005"
-msgid "TMDB API key (optional override)"
-msgstr ""
-
 msgctxt "#30006"
 msgid "TorBox API key (optional manual override)"
 msgstr ""

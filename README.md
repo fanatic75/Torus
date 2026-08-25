@@ -55,7 +55,7 @@ hash** — so if a cached release disappears, resume still works against whateve
 - Kodi **21 (Omega)** — developed and tested on CoreELEC.
 - A **paid TorBox account** (linked in-app via device code — no key typing).
 
-That's it. No TMDB key, no metadata signup.
+That's it. No API keys, no metadata signup.
 
 ## Install
 
@@ -90,7 +90,7 @@ Nothing is mandatory to type. Optional settings:
   hosts.
 - **Auto-delete old resume points** — off by default (Continue Watching just shows the 40 most
   recent). When on, prunes resume points untouched for the configured number of days.
-- **Advanced** — optional manual TMDB / TorBox key overrides (not needed for normal use).
+- **Advanced** — an optional manual TorBox key override (not needed for normal use).
 
 ## Architecture
 

@@ -6,8 +6,8 @@
   not render reliably in Kodi's settings UI.
 
   No key typing required for normal use: TorBox is linked in-addon via device code
-  (Home > "Link your TorBox account"), and TMDB uses a bundled key. The fields
-  below are dropdowns/toggles plus optional advanced overrides.
+  (Home > "Link your TorBox account"), and metadata is keyless (Cinemeta). The
+  fields below are dropdowns/toggles plus optional advanced overrides.
 -->
 <settings version="1">
     <section id="plugin.video.torus">
@@ -55,16 +55,6 @@
                     </dependencies>
                     <control type="edit" format="integer">
                         <heading>30021</heading>
-                    </control>
-                </setting>
-                <setting id="tmdb_api_key" type="string" label="30005">
-                    <level>0</level>
-                    <default></default>
-                    <constraints>
-                        <allowempty>true</allowempty>
-                    </constraints>
-                    <control type="edit" format="string">
-                        <heading>30005</heading>
                     </control>
                 </setting>
                 <setting id="torbox_api_key" type="string" label="30006">

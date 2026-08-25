@@ -1,7 +1,7 @@
 """JSON-over-HTTPS with DNS-over-HTTPS (DoH) resolution.
 
-Why DoH: some ISPs (e.g. Jio/Airtel in India) DNS-poison TMDB, handing back a
-dead IP so requests hang. We bypass the system resolver entirely — resolve every
+Why DoH: some ISPs (e.g. Jio/Airtel in India) DNS-poison metadata hosts, handing
+back a dead IP so requests hang. We bypass the system resolver entirely — resolve every
 hostname via encrypted DoH to a well-known resolver IP (no system DNS needed for
 the resolver itself), then connect straight to the real IP with correct SNI and
 full certificate validation. This makes the addon work behind ISP DNS blocks

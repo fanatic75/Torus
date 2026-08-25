@@ -31,6 +31,90 @@ EXCLUDE_DIRS = {".git", "repo", "docs", "build", "__pycache__", ".devprofile",
 EXCLUDE_FILES = {"deploy.sh", "package.py", "dev.config.json",
                  "dev.config.example.json", ".DS_Store"}
 
+INDEX_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torus — Kodi addon</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127909;</text></svg>">
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:#0d1117; color:#e6edf3; line-height:1.6; }
+.wrap { max-width:760px; margin:0 auto; padding:48px 20px 60px; }
+header { text-align:center; margin-bottom:34px; }
+h1 { font-size:2.6rem; margin:0 0 8px; letter-spacing:-.02em; background:linear-gradient(90deg,#7c9cff,#b98bff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.tag { color:#9aa7b4; font-size:1.05rem; margin:0; }
+.card { background:#161b22; border:1px solid #21262d; border-radius:14px; padding:22px 24px; margin:20px 0; }
+h2 { font-size:1.15rem; margin:0 0 14px; }
+.srcbox { display:flex; gap:10px; align-items:center; background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:12px 14px; }
+.srcbox code { font-size:1.05rem; color:#a5d6ff; word-break:break-all; flex:1; }
+button.copy { background:#238636; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:.9rem; cursor:pointer; white-space:nowrap; }
+button.copy:hover { background:#2ea043; }
+ol { padding-left:20px; margin:0; } li { margin:8px 0; }
+.dl { display:inline-block; margin:10px 10px 0 0; background:#21262d; border:1px solid #30363d; color:#e6edf3; text-decoration:none; padding:10px 16px; border-radius:8px; font-size:.95rem; }
+.dl:hover { border-color:#8b949e; }
+.feat { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.feat div { background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:12px 14px; font-size:.92rem; color:#c9d1d9; }
+footer { text-align:center; color:#6e7681; font-size:.85rem; margin-top:34px; }
+a { color:#7c9cff; }
+kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1px 6px; font-size:.85em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Torus</h1>
+  <p class="tag">A TorBox-native media browser for Kodi — Stremio-like, keyless, with local resume.</p>
+</header>
+
+<div class="card">
+  <h2>Add this source in Kodi</h2>
+  <div class="srcbox">
+    <code id="src">__SOURCE_URL__</code>
+    <button class="copy" onclick="navigator.clipboard.writeText(document.getElementById('src').textContent);this.textContent='Copied'">Copy</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Install (auto-updates)</h2>
+  <ol>
+    <li>Enable <kbd>Settings &#8594; System &#8594; Add-ons &#8594; Unknown sources</kbd>.</li>
+    <li><kbd>Settings &#8594; File manager &#8594; Add source</kbd> &#8594; paste the URL above &#8594; name it <b>Torus</b>.</li>
+    <li><kbd>Add-ons &#8594; Install from zip file &#8594; Torus &#8594; repository.torus</kbd> &#8594; the repository zip.</li>
+    <li><kbd>Add-ons &#8594; Install from repository &#8594; Torus Repository &#8594; Video add-ons &#8594; Torus &#8594; Install</kbd>.</li>
+    <li>Open Torus &#8594; <b>&#128279; Link your TorBox account</b> &#8594; approve the code at <b>tor.box/link</b>.</li>
+  </ol>
+  <div>
+    <a class="dl" href="__REPO_ZIP__">&#11015; repository zip</a>
+    <a class="dl" href="__ADDON_ZIP__">&#11015; addon zip (v__VERSION__)</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>What it does</h2>
+  <div class="feat">
+    <div>Keyless discovery (Cinemeta)</div>
+    <div>TorBox device login &mdash; no typing</div>
+    <div>Comet + Torrentio, merged</div>
+    <div>TRaSH-tiered source ranking</div>
+    <div>Resume &amp; Continue Watching</div>
+    <div>TV Up Next</div>
+    <div>Local Watchlist</div>
+    <div>Works behind ISP DNS blocks</div>
+  </div>
+</div>
+
+<footer>
+  Torus v__VERSION__ &middot; <a href="__GH__">source on GitHub</a><br>
+  Requires a TorBox account. Hosts no content, ships no indexers.
+</footer>
+</div>
+</body>
+</html>
+"""
+
 
 def addon_version() -> str:
     return ET.parse(os.path.join(ROOT, "addon.xml")).getroot().get("version")
@@ -113,6 +197,18 @@ def write_addons_xml(build_parent: str) -> None:
     print(f"  wrote repo/addons.xml (md5 {md5})")
 
 
+def write_index_html(version: str) -> None:
+    html = (INDEX_TEMPLATE
+            .replace("__SOURCE_URL__", DATADIR)
+            .replace("__ADDON_ZIP__", f"plugin.video.torus/plugin.video.torus-{version}.zip")
+            .replace("__REPO_ZIP__", f"repository.torus/repository.torus-{REPO_VERSION}.zip")
+            .replace("__GH__", f"https://github.com/{GH_USER}/Torus")
+            .replace("__VERSION__", version))
+    with open(os.path.join(ROOT, PUBLISH_DIR, "index.html"), "w", encoding="utf-8") as fh:
+        fh.write(html)
+    print("  wrote docs/index.html")
+
+
 def main() -> None:
     version = addon_version()
     print(f"Packaging {ADDON} {version} + {REPO} {REPO_VERSION}")
@@ -121,8 +217,9 @@ def main() -> None:
     zip_addon(build_parent, ADDON, version)
     zip_addon(build_parent, REPO, REPO_VERSION)
     write_addons_xml(build_parent)
+    write_index_html(version)
     shutil.rmtree(os.path.join(build_parent))
-    print("Done. Commit the repo/ folder to publish.")
+    print("Done. Commit the docs/ folder to publish.")
 
 
 if __name__ == "__main__":

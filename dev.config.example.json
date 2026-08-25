@@ -1,7 +1,4 @@
 {
-  "_comment": "Copy to dev.config.json (gitignored) and fill in your own keys for local dev. Real users enter keys in Kodi addon settings instead.",
-  "tmdb_api_key": "YOUR_TMDB_API_KEY",
-  "torbox_api_key": "YOUR_TORBOX_API_KEY",
-  "provider": "comet",
-  "quality_profile": "cinephile"
+  "_comment": "Copy to dev.config.json (gitignored) for local dev overrides. Not needed for normal use — metadata is keyless and TorBox is linked in-app via device code.",
+  "provider": "both"
 }

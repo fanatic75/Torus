@@ -1,10 +1,8 @@
 """Runtime configuration and credential storage.
 
-Two principles that keep the remote-control UX painless:
-  * TMDB uses a bundled key (a low-value, rate-limited client id) so users never
-    type one. It's overridable via the optional `tmdb_api_key` setting.
-  * TorBox is linked via the in-addon device-code flow (see auth.py); the returned
-    token is stored in a small file in the addon profile — never typed.
+Keeps the remote-control UX painless: metadata is keyless (Cinemeta), and TorBox
+is linked via the in-addon device-code flow (see auth.py) — the returned token is
+stored in a small file in the addon profile, never typed.
 """
 import json
 import os
@@ -17,10 +15,6 @@ try:
 except Exception:  # not running inside Kodi (laptop dev)
     _ADDON = None
     xbmcvfs = None
-
-# Bundled TMDB v3 API key. NOT a personal secret — it's a client identifier that
-# TMDB permits embedding in apps. Overridable via settings; rotate freely.
-DEFAULT_TMDB_KEY = ""
 
 _DEV_CACHE = None
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -60,11 +54,6 @@ def get(key: str, default: str = "") -> str:
     return _dev_config().get(key, default)
 
 
-# --- TMDB ------------------------------------------------------------------
-def tmdb_key() -> str:
-    return get("tmdb_api_key") or DEFAULT_TMDB_KEY
-
-
 # --- TorBox token (stored, not typed) --------------------------------------
 def _token_path() -> str:
     return os.path.join(_profile_dir(), "torbox_token.json")
@@ -101,7 +90,7 @@ def provider() -> str:
 
 def image_proxy() -> bool:
     """Route poster/backdrop images through a proxy so ISP-blocked image hosts
-    (e.g. image.tmdb.org behind Jio) still load in Kodi's image loader."""
+    (e.g. Cinemeta's image host behind Jio) still load in Kodi's image loader."""
     return get("image_proxy", "true").lower() != "false"
 
 

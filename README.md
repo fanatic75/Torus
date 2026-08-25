@@ -2,12 +2,9 @@
 
 A **TorBox-native media browser for Kodi** with a Stremio-like feel and local-first resume.
 
-Browse movies and TV via TMDB, find instantly-playable **TorBox-cached** sources through
-Stremio-protocol providers (Comet, Torrentio), play in Kodi's native player, and **resume where
-you left off** — all stored locally. No accounts, no remote sync server, no scraper zoo to
-configure.
-
-> Status: **early development.** See the [Roadmap](#roadmap). Currently at M0 (installable skeleton).
+Browse movies and TV, find instantly-playable **TorBox-cached** sources, play them in Kodi's
+native player, and **resume where you left off** — all stored locally. No accounts to create, no
+API keys to enter, no remote sync server, and no scraper zoo to configure.
 
 ## Why
 
@@ -16,107 +13,120 @@ mesh of scrapers and Trakt sync. Torus is deliberately narrow: **one polished lo
 `browse → Play → best cached TorBox source → play → resume later` — built specifically around
 TorBox and a home-theater box (CoreELEC / AM6B+).
 
+## Features
+
+- **No API keys anywhere.** Metadata is keyless; TorBox is linked with a phone-approved device
+  code (nothing to type on a remote).
+- **Keyless discovery** via Cinemeta: Popular / Top-Rated / New / Search, for movies and TV.
+- **One-click Play** that auto-picks the best cached source, plus **Choose source** for a ranked
+  list with quality, size, and release-group tier labels.
+- **Quality-aware ranking** biased for home theater: resolution › source (REMUX › BluRay › WEB-DL)
+  › **release-group tier** › HDR/Dolby Vision › lossless audio.
+- **Resume + Continue Watching**, keyed by IMDb id (never the torrent), so it survives torrents
+  rotating out of cache. Resume reuses the exact source for a fast, position-accurate restart.
+- **Works behind ISP DNS blocks** (e.g. Jio/Airtel blocking metadata hosts in India) with zero
+  network config — hosts are resolved over DoH and images proxied.
+
 ## How it works
 
 ```
 Cinemeta        → keyless, IMDb-keyed metadata (catalogs, search, artwork)
   ↓ (imdb id)
-Provider        → Stremio-protocol addon (Comet/Torrentio) with your TorBox key
+Provider        → Stremio-protocol source addon (Comet) with your TorBox key
   ↓                returns TorBox-cached streams, already resolved to playable URLs
-Ranking         → prefer REMUX > WEB-DL, DV/FEL > HDR10, TrueHD Atmos, sensible size
+Ranking         → resolution › REMUX › group tier (TRaSH) › DV/HDR › lossless audio
   ↓
-Kodi player     → plays the URL
+Kodi player     → plays the URL (Comet → TorBox CDN)
   ↓
-SQLite (local)  → resume position + continue-watching + watchlist, keyed by IMDb id
+SQLite (local)  → resume position + Continue Watching, keyed by IMDb id
 ```
 
 Nothing is scraped locally and no server is required. Metadata comes from **Cinemeta** (Stremio's
-public, keyless metadata API — no API key to sign up for or bundle), and source discovery, TorBox
-cache-checking, and URL resolution are all done by the hosted provider. Watch-state is keyed on
-**IMDb id, never on the torrent hash**, so a different cached release tomorrow still resumes
-correctly. Behind ISP DNS blocks (e.g. TMDB/Cinemeta blocked in India), the addon resolves hosts
-over DoH and proxies images, so it works with no network configuration.
+public, keyless metadata API), and source discovery, TorBox cache-checking, and stream resolution
+are all done by the hosted provider. Watch-state is keyed on **IMDb id, never on the torrent
+hash** — so if a cached release disappears, resume still works against whatever's cached next.
+
+## Requirements
+
+- Kodi **21 (Omega)** — developed and tested on CoreELEC.
+- A **paid TorBox account** (linked in-app via device code — no key typing).
+
+That's it. No TMDB key, no metadata signup.
+
+## Install
+
+1. Get the addon folder onto the device as `plugin.video.torus` (clone this repo, or download a
+   zip of it). The repo root *is* the addon.
+2. In Kodi: **Settings → Add-ons → Install from zip file** (or copy the folder into
+   `.kodi/addons/` and enable it).
+3. Open Torus and choose **🔗 Link your TorBox account** — approve the short code shown, on your
+   phone at `tor.box/link`. Done.
+
+## Configuration
+
+Nothing is mandatory to type. Optional settings:
+
+- **Source provider** — Comet (the provider layer is pluggable for future sources).
+- **Quality profile** — preferred ranking bias (the default favors 4K / REMUX / Dolby Vision /
+  lossless audio and reputable release groups).
+- **Route posters via proxy** — on by default; keeps posters loading behind ISP-blocked image
+  hosts.
+- **Auto-delete old resume points** — off by default (Continue Watching just shows the 40 most
+  recent). When on, prunes resume points untouched for the configured number of days.
+- **Advanced** — optional manual TMDB / TorBox key overrides (not needed for normal use).
 
 ## Architecture
 
 ```
-Torus/                     (repo root == the addon; deployed as plugin.video.torus)
-├── addon.xml              # plugin + background service declarations
-├── main.py                # router / UI entry point
-├── service.py             # background player-monitor (resume engine)
+Torus/                       (repo root == the addon; deployed as plugin.video.torus)
+├── addon.xml                # plugin + background service declarations
+├── main.py                  # router / UI entry point
+├── service.py               # background player-monitor (resume engine)
 └── resources/
-    ├── settings.xml        # provider + quality + optional advanced overrides
+    ├── settings.xml          # settings (string IDs live in language/)
+    ├── language/             # strings.po (settings labels)
     └── lib/
-        ├── cinemeta.py     # keyless IMDb-keyed metadata (catalogs/search/detail) [M1]
-        ├── http.py         # DoH-resolving HTTP client (defeats ISP DNS blocks)   [M1]
-        ├── auth.py         # TorBox device-code login (no key typing)             [M1]
-        ├── providers/      # comet, torrentio, ... behind one interface           [M2]
-        ├── ranking.py      # release parsing + quality scoring                    [M2/M4]
-        ├── db.py           # SQLite (progress, watchlist)                         [M5]
-        └── kodi/           # ListItem / view builders                            [M1+]
+        ├── cinemeta.py       # keyless, IMDb-keyed metadata (catalogs/search/detail)
+        ├── http.py           # DoH-resolving HTTP client (defeats ISP DNS blocks)
+        ├── auth.py           # TorBox device-code login (no key typing)
+        ├── config.py         # settings + local token/config
+        ├── providers/        # source adapters (Comet) behind one Provider interface
+        ├── ranking.py        # quality scoring
+        ├── release_groups.py # TRaSH Guides release-group tiers
+        ├── db.py             # SQLite: resume progress + Continue Watching
+        └── kodi/             # ListItem / view builders
 ```
-
-## Requirements
-
-- Kodi **21 (Omega)** — developed/tested against CoreELEC.
-- A **paid TorBox account** (linked in-app via device code — no key typing).
-
-No TMDB key, no metadata signup: discovery uses Cinemeta, which is keyless.
-
-## Configuration
-
-There's nothing mandatory to type. On first run, open **🔗 Link your TorBox account** from the
-home screen and approve the short code on your phone. Optional settings:
-
-- **Source provider** — Comet (default) or Torrentio.
-- **Quality profile** — Cinephile / Balanced / Data Saver.
-- **Route posters via proxy** — on by default; helps behind ISP-blocked image hosts.
-- Advanced: optional TMDB/TorBox key overrides (not needed for normal use).
 
 ## Development
 
 ```bash
 git clone <this-repo> Torus && cd Torus
-# copy the example and fill in your own keys (this file is gitignored):
+# for local testing, copy the example and add your own keys (this file is gitignored):
 cp dev.config.example.json dev.config.json
 ```
 
-Deploy to your box over SSH:
+Deploy to a CoreELEC/Kodi box over SSH and watch logs:
 
 ```bash
-TORUS_BOX=root@192.168.29.55 ./deploy.sh
+TORUS_BOX=root@<box-ip> ./deploy.sh
+ssh root@<box-ip> 'tail -f /storage/.kodi/temp/kodi.log | grep -i torus'
 ```
 
-Watch logs:
-
-```bash
-ssh root@192.168.29.55 'tail -f /storage/.kodi/temp/kodi.log | grep -i torus'
-```
-
-## Roadmap
-
-- [x] **M0** — installable skeleton (router + service stub + settings)
-- [ ] **M1** — TMDB discovery: trending/popular rows, search, movie/show detail
-- [ ] **M2** — provider adapter (Comet): list cached sources by IMDb id
-- [ ] **M3** — playback: source-select → `setResolvedUrl` → native player
-- [ ] **M4** — ranking engine + one-click **Play** / **Choose Source**
-- [ ] **M5** — local resume + **Continue Watching** (the service engine)
-- [ ] **M6** — TV drill-down (seasons/episodes/next-up) + settings polish
+Kodi caches addon Python modules per session, so after changing library code restart Kodi
+(`systemctl restart kodi`) to load it; `main.py` re-runs on each navigation.
 
 ## Disclaimer
 
-Torus is a client for services you configure and pay for (TorBox) and public metadata (TMDB). It
-hosts no content and ships no indexers. Use it in accordance with the terms of the services you
+Torus is a client for services you configure and pay for (TorBox) and public metadata (Cinemeta).
+It hosts no content and ships no indexers. Use it in accordance with the terms of the services you
 connect and the laws of your jurisdiction.
 
 ## Credits
 
-- **[TRaSH Guides](https://trash-guides.info)** — release-group quality tiers used
-  to rank reputable scene/p2p groups. Torus bundles a curated snapshot of their
-  group tier lists.
+- **[TRaSH Guides](https://trash-guides.info)** — release-group quality tiers used to rank
+  reputable scene/p2p groups. Torus bundles a curated snapshot of their group tier lists.
 - **[Cinemeta](https://www.stremio.com/)** (Stremio) — keyless metadata.
-- **[Comet](https://github.com/g0ldyy/comet)** / **[Torrentio]** — Stremio-protocol
-  source providers.
+- **[Comet](https://github.com/g0ldyy/comet)** — Stremio-protocol source provider.
 
 ## License
 

@@ -42,10 +42,17 @@ def device_poll(device_code: str) -> dict:
 
 
 def _extract_token(response: dict) -> str:
+    # Authorized response is {success, data: {access_token, token_type: "Bearer"}}.
     data = response.get("data") or {}
     if isinstance(data, str):
         return data
-    return data.get("token") or data.get("auth_token") or data.get("api_key") or ""
+    return (
+        data.get("access_token")
+        or data.get("token")
+        or data.get("auth_token")
+        or data.get("api_key")
+        or ""
+    )
 
 
 def run_device_auth() -> bool:

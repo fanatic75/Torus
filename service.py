@@ -24,7 +24,8 @@ class TorusPlayer(xbmc.Player):
         self.identity = None
         self.name = ""
         self.poster = ""
-        self.advanced = False  # have we already marked this item finished?
+        self.advanced = False    # have we already marked this item finished?
+        self.last_ratio = 0.0    # last observed watched fraction (0 = never played)
 
     def _read_identity(self):
         raw = xbmcgui.Window(HOME).getProperty(PLAYING_PROP)
@@ -33,10 +34,23 @@ class TorusPlayer(xbmc.Player):
         except ValueError:
             return None
 
-    def onAVStarted(self):
+    def onPlayBackStarted(self):
+        # Capture identity per attempt so a failed play can't act on a stale one.
         self.identity = self._read_identity()
+        self.advanced = False
+        self.last_ratio = 0.0
+
+    def onPlayBackError(self):
+        # Playback failed to open (expired link, no network, ...). Never touch
+        # the resume point — just forget what we were trying to play.
+        self.identity = None
+
+    def onAVStarted(self):
+        if not self.identity:
+            self.identity = self._read_identity()
         self.name, self.poster = "", ""
         self.advanced = False
+        self.last_ratio = 0.0
         if self.identity:
             # Fetch title/poster once so Continue Watching renders without extra calls.
             try:
@@ -56,7 +70,8 @@ class TorusPlayer(xbmc.Player):
             return
         if duration <= 0:
             return
-        if position / duration > 0.9:  # effectively finished
+        self.last_ratio = position / duration
+        if self.last_ratio > 0.9:  # effectively finished
             if not self.advanced:
                 self._advance()
         else:
@@ -113,11 +128,21 @@ class TorusPlayer(xbmc.Player):
         self.identity = None
 
     def onPlayBackEnded(self):
-        if self.identity:
-            nxt = self._advance() if not self.advanced else self._next_episode(self.identity)
-            self.identity = None
-            if nxt:
-                self._prompt_next(nxt)
+        identity = self.identity
+        self.identity = None
+        if not identity:
+            return
+        # Only treat as "finished" if we actually watched to near the end. A
+        # failed/instant-ended playback (dead link) must NOT clear the resume point.
+        if not (self.advanced or self.last_ratio > 0.9):
+            return
+        self.identity = identity  # _advance() reads self.identity
+        nxt = self._next_episode(identity)
+        if not self.advanced:
+            self._advance()
+        self.identity = None
+        if nxt:
+            self._prompt_next(nxt)
 
 
 def main() -> None:

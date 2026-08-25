@@ -294,20 +294,18 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) ->
     progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
 
     if not url:  # one-click Play / Continue Watching
-        # Reuse the previously-played source: instant (skips the ~1.4-3.4s Comet
-        # search) and position-accurate. Falls back to a fresh search otherwise.
-        if progress and progress.get("url"):
-            url = progress["url"]
-        else:
-            if not config.torbox_token():
-                notify("Link your TorBox account first")
-                xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-                return
-            url = _resolve_best(imdb, mtype, season_number, episode_number)
-            if not url:
-                notify("No cached sources found")
-                xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-                return
+        # Always resolve a FRESH source. TorBox stream links are IP-locked and
+        # time-limited, so reusing a stored URL breaks after an IP change or a
+        # few hours ("this link has expired / can be watched on this IP only").
+        if not config.torbox_token():
+            notify("Link your TorBox account first")
+            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+            return
+        url = _resolve_best(imdb, mtype, season_number, episode_number)
+        if not url:
+            notify("No cached sources found")
+            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+            return
 
     item = xbmcgui.ListItem(path=url)
     if progress and progress.get("duration"):

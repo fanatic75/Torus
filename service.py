@@ -58,7 +58,7 @@ class TorusPlayer(xbmc.Player):
         else:
             db.save_progress(i["imdb"], i["mtype"], i.get("season", 0),
                              i.get("episode", 0), position, duration,
-                             self.name, self.poster)
+                             self.name, self.poster, i.get("url", ""))
 
     def onPlayBackPaused(self):
         self.save()

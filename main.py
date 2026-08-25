@@ -210,19 +210,25 @@ def _resolve_best(imdb, mtype, season_number, episode_number) -> str | None:
 
 
 def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) -> None:
-    if not url:  # one-click Play / Continue Watching: pick the best cached source
-        if not config.torbox_token():
-            notify("Link your TorBox account first")
-            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-            return
-        url = _resolve_best(imdb, mtype, season_number, episode_number)
-        if not url:
-            notify("No cached sources found")
-            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-            return
+    progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
+
+    if not url:  # one-click Play / Continue Watching
+        # Reuse the previously-played source: instant (skips the ~1.4-3.4s Comet
+        # search) and position-accurate. Falls back to a fresh search otherwise.
+        if progress and progress.get("url"):
+            url = progress["url"]
+        else:
+            if not config.torbox_token():
+                notify("Link your TorBox account first")
+                xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+                return
+            url = _resolve_best(imdb, mtype, season_number, episode_number)
+            if not url:
+                notify("No cached sources found")
+                xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+                return
 
     item = xbmcgui.ListItem(path=url)
-    progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
     if progress and progress.get("duration"):
         ratio = progress["position"] / progress["duration"]
         if 0.01 < ratio < 0.95:
@@ -235,10 +241,11 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) ->
             item.setProperty("ResumeTime", str(resume_at))
             item.setProperty("TotalTime", str(duration))
 
-    if imdb:  # tell the service what's playing so it can persist progress
+    if imdb:  # tell the service what's playing so it can persist progress + source url
         xbmcgui.Window(10000).setProperty(PLAYING_PROP, json.dumps({
             "imdb": imdb, "mtype": mtype,
             "season": season_number or 0, "episode": episode_number or 0,
+            "url": url,
         }))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
 

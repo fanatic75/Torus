@@ -23,30 +23,37 @@ def _connect() -> sqlite3.Connection:
             duration REAL NOT NULL,
             name TEXT DEFAULT '',
             poster TEXT DEFAULT '',
+            url TEXT DEFAULT '',
             updated_at INTEGER NOT NULL,
             PRIMARY KEY (imdb, season, episode)
         )
     """)
+    # Migrate older DBs that predate the url column.
+    try:
+        conn.execute("ALTER TABLE progress ADD COLUMN url TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     return conn
 
 
 def save_progress(imdb, mtype, season, episode, position, duration,
-                  name="", poster="") -> None:
+                  name="", poster="", url="") -> None:
     season, episode = int(season or 0), int(episode or 0)
     conn = _connect()
     try:
         conn.execute("""
             INSERT INTO progress
-                (imdb, mtype, season, episode, position, duration, name, poster, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (imdb, mtype, season, episode, position, duration, name, poster, url, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(imdb, season, episode) DO UPDATE SET
                 position=excluded.position,
                 duration=excluded.duration,
                 mtype=excluded.mtype,
                 name=COALESCE(NULLIF(excluded.name, ''), progress.name),
                 poster=COALESCE(NULLIF(excluded.poster, ''), progress.poster),
+                url=COALESCE(NULLIF(excluded.url, ''), progress.url),
                 updated_at=excluded.updated_at
-        """, (imdb, mtype, season, episode, position, duration, name, poster,
+        """, (imdb, mtype, season, episode, position, duration, name, poster, url,
               int(time.time())))
         conn.commit()
     finally:
@@ -57,12 +64,12 @@ def get_progress(imdb, season=0, episode=0) -> dict | None:
     conn = _connect()
     try:
         row = conn.execute(
-            "SELECT position, duration FROM progress WHERE imdb=? AND season=? AND episode=?",
+            "SELECT position, duration, url FROM progress WHERE imdb=? AND season=? AND episode=?",
             (imdb, int(season or 0), int(episode or 0)),
         ).fetchone()
     finally:
         conn.close()
-    return {"position": row[0], "duration": row[1]} if row else None
+    return {"position": row[0], "duration": row[1], "url": row[2]} if row else None
 
 
 def clear_progress(imdb, season=0, episode=0) -> None:

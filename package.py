@@ -18,7 +18,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ADDON = "plugin.video.torus"
 REPO = "repository.torus"
-REPO_VERSION = "1.0.0"
+REPO_VERSION = "1.0.1"
 GH_USER = "fanatic75"
 # Published via GitHub Pages (main branch /docs), served at the site root — a
 # short source URL like POV's kodifitzwell.github.io/repo/.
@@ -151,7 +151,6 @@ def write_repository_addon(build_parent: str) -> None:
     <extension point="xbmc.addon.repository" name="Torus Repository">
         <dir>
             <info compressed="false">{DATADIR}addons.xml</info>
-            <checksum>{DATADIR}addons.xml.md5</checksum>
             <datadir zip="true">{DATADIR}</datadir>
         </dir>
     </extension>

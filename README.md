@@ -64,7 +64,7 @@ First, allow third-party addons: **Settings → System → Add-ons → Unknown s
 ### Option A — repository (recommended, auto-updates)
 
 1. **Settings → File manager → Add source**, enter this URL and name it `Torus`:
-   `https://raw.githubusercontent.com/fanatic75/Torus/main/repo/`
+   `https://fanatic75.github.io/Torus/`
 2. **Add-ons → Install from zip file → Torus → repository.torus →** `repository.torus-1.0.0.zip`.
 3. **Add-ons → Install from repository → Torus Repository → Video add-ons → Torus → Install.**
 
@@ -72,7 +72,7 @@ You'll get new versions automatically from then on.
 
 ### Option B — single zip (no auto-updates)
 
-Download `repo/plugin.video.torus/plugin.video.torus-<version>.zip` from this repo and use
+Download `docs/plugin.video.torus/plugin.video.torus-<version>.zip` from this repo and use
 **Add-ons → Install from zip file**. (The plain GitHub "Download ZIP" of the repo will *not*
 install — Kodi needs the inner folder named `plugin.video.torus`, which only the packaged zip has.)
 

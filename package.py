@@ -20,11 +20,14 @@ ADDON = "plugin.video.torus"
 REPO = "repository.torus"
 REPO_VERSION = "1.0.0"
 GH_USER = "fanatic75"
-GH_BRANCH = "main"
-DATADIR = f"https://raw.githubusercontent.com/{GH_USER}/Torus/{GH_BRANCH}/repo/"
+# Published via GitHub Pages (main branch /docs), served at the site root — a
+# short source URL like POV's kodifitzwell.github.io/repo/.
+PUBLISH_DIR = "docs"
+DATADIR = f"https://{GH_USER}.github.io/Torus/"
 
 # Dev-only paths that must never ship inside the addon zip.
-EXCLUDE_DIRS = {".git", "repo", "build", "__pycache__", ".devprofile", ".claude", ".github"}
+EXCLUDE_DIRS = {".git", "repo", "docs", "build", "__pycache__", ".devprofile",
+                ".claude", ".github"}
 EXCLUDE_FILES = {"deploy.sh", "package.py", "dev.config.json",
                  "dev.config.example.json", ".DS_Store"}
 
@@ -76,7 +79,7 @@ def write_repository_addon(build_parent: str) -> None:
 
 
 def zip_addon(build_parent: str, addon_id: str, version: str) -> None:
-    out_dir = os.path.join(ROOT, "repo", addon_id)
+    out_dir = os.path.join(ROOT, PUBLISH_DIR, addon_id)
     os.makedirs(out_dir, exist_ok=True)
     out_zip = os.path.join(out_dir, f"{addon_id}-{version}.zip")
     base = os.path.join(build_parent, addon_id)
@@ -100,7 +103,7 @@ def write_addons_xml(build_parent: str) -> None:
     parts.append(addon_xml_element(os.path.join(build_parent, REPO, "addon.xml")))
     parts.append("</addons>\n")
     xml = "\n".join(parts)
-    repo_dir = os.path.join(ROOT, "repo")
+    repo_dir = os.path.join(ROOT, PUBLISH_DIR)
     os.makedirs(repo_dir, exist_ok=True)
     with open(os.path.join(repo_dir, "addons.xml"), "w", encoding="utf-8") as fh:
         fh.write(xml)

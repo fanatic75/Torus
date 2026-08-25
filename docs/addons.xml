@@ -27,9 +27,9 @@
 <addon id="repository.torus" name="Torus Repository" version="1.0.0" provider-name="Prateek Banga">
     <extension point="xbmc.addon.repository" name="Torus Repository">
         <dir>
-            <info compressed="false">https://raw.githubusercontent.com/fanatic75/Torus/main/repo/addons.xml</info>
-            <checksum>https://raw.githubusercontent.com/fanatic75/Torus/main/repo/addons.xml.md5</checksum>
-            <datadir zip="true">https://raw.githubusercontent.com/fanatic75/Torus/main/repo/</datadir>
+            <info compressed="false">https://fanatic75.github.io/Torus/addons.xml</info>
+            <checksum>https://fanatic75.github.io/Torus/addons.xml.md5</checksum>
+            <datadir zip="true">https://fanatic75.github.io/Torus/</datadir>
         </dir>
     </extension>
     <extension point="xbmc.addon.metadata">

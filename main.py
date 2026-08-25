@@ -9,6 +9,7 @@ Stateless request/response: parse the action, build a listing, endOfDirectory,
 exit. Metadata is Cinemeta (keyless, IMDb-keyed); sources come from the provider
 layer (Comet) and play via setResolvedUrl.
 """
+import json
 import sys
 from urllib.parse import urlencode, parse_qsl
 
@@ -16,9 +17,11 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
-from resources.lib import auth, cinemeta, config, providers, ranking
+from resources.lib import auth, cinemeta, config, db, providers, ranking, release_groups
 from resources.lib.http import HttpError, log
 from resources.lib.kodi import listing
+
+PLAYING_PROP = "torus.playing"
 
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
@@ -100,12 +103,24 @@ def search(mtype: str) -> None:
 
 
 # --- detail ----------------------------------------------------------------
+def _choose_source_ctx(imdb, mtype, season_number=0, episode_number=0):
+    """Context-menu entry that opens the full ranked source list."""
+    url = build_url(action="sources", imdb=imdb, mtype=mtype,
+                    season=season_number, episode=episode_number)
+    return [("Choose source", f"Container.Update({url})")]
+
+
 def detail(imdb: str, mtype: str) -> None:
     meta = cinemeta.meta(mtype, imdb)
     if mtype == "movie":
-        find = listing.catalog_item(meta)
-        find.setLabel(f"▶  Find sources — {meta.get('name', '')}")
-        add_item(find, True, action="sources", imdb=imdb, mtype="movie")
+        play_item = listing.catalog_item(meta)
+        play_item.setLabel(f"▶  Play — {meta.get('name', '')}")
+        play_item.setProperty("IsPlayable", "true")
+        play_item.addContextMenuItems(_choose_source_ctx(imdb, "movie"))
+        add_item(play_item, False, action="play", imdb=imdb, mtype="movie")
+        # Explicit source picker too.
+        choose = xbmcgui.ListItem(label="☰  Choose source")
+        add_item(choose, True, action="sources", imdb=imdb, mtype="movie")
         finish("movies")
         return
     # series: list seasons derived from the episode videos
@@ -126,10 +141,33 @@ def season(imdb: str, season_number: int) -> None:
         key=lambda v: v.get("episode", 0),
     )
     for video in episodes:
-        add_item(listing.episode_item(meta, video), True,
-                 action="sources", imdb=imdb, mtype="series",
-                 season=season_number, episode=video.get("episode", 0))
+        episode_number = video.get("episode", 0)
+        item = listing.episode_item(meta, video)
+        item.setProperty("IsPlayable", "true")
+        item.addContextMenuItems(
+            _choose_source_ctx(imdb, "series", season_number, episode_number))
+        add_item(item, False, action="play", imdb=imdb, mtype="series",
+                 season=season_number, episode=episode_number)
     finish("episodes")
+
+
+def continue_watching() -> None:
+    for row in db.list_continue():
+        poster = row.get("poster") or ""
+        label = row.get("name") or row["imdb"]
+        if row.get("mtype") == "series" and row.get("episode"):
+            label = f"{label}  S{row['season']:02d}E{row['episode']:02d}"
+        item = xbmcgui.ListItem(label=label)
+        item.setArt({"poster": poster, "thumb": poster})
+        item.setProperty("IsPlayable", "true")
+        tag = item.getVideoInfoTag()
+        tag.setMediaType("movie" if row.get("mtype") == "movie" else "episode")
+        tag.setTitle(row.get("name") or "")
+        item.addContextMenuItems(_choose_source_ctx(
+            row["imdb"], row.get("mtype", "movie"), row.get("season", 0), row.get("episode", 0)))
+        add_item(item, False, action="play", imdb=row["imdb"], mtype=row.get("mtype", "movie"),
+                 season=row.get("season", 0), episode=row.get("episode", 0))
+    finish()
 
 
 # --- sources + playback ----------------------------------------------------
@@ -149,19 +187,56 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
         notify("No cached sources found")
 
     for stream in streams:
-        bits = [b for b in (stream.quality, stream.size) if b]
+        tier = release_groups.tier_label(stream.title)
+        bits = [b for b in (stream.quality, stream.size, tier) if b]
         prefix = f"[{' · '.join(bits)}] " if bits else ""
         item = xbmcgui.ListItem(label=f"{prefix}{stream.title}")
         item.setProperty("IsPlayable", "true")
         tag = item.getVideoInfoTag()
         tag.setMediaType("movie" if mtype == "movie" else "episode")
         tag.setTitle(stream.title)
-        add_item(item, False, action="play", url=stream.url)
+        add_item(item, False, action="play", url=stream.url, imdb=imdb, mtype=mtype,
+                 season=season_number or 0, episode=episode_number or 0)
     finish()
 
 
-def play(url: str) -> None:
+def _resolve_best(imdb, mtype, season_number, episode_number) -> str | None:
+    provider = providers.get_provider()
+    streams = ranking.rank(provider.search(imdb, mtype,
+                                            season_number or None, episode_number or None))
+    return streams[0].url if streams else None
+
+
+def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) -> None:
+    if not url:  # one-click Play / Continue Watching: pick the best cached source
+        if not config.torbox_token():
+            notify("Link your TorBox account first")
+            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+            return
+        url = _resolve_best(imdb, mtype, season_number, episode_number)
+        if not url:
+            notify("No cached sources found")
+            xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+            return
+
     item = xbmcgui.ListItem(path=url)
+    progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
+    if progress and progress.get("duration"):
+        ratio = progress["position"] / progress["duration"]
+        if 0.01 < ratio < 0.95:
+            try:
+                item.getVideoInfoTag().setResumePoint(
+                    float(progress["position"]), float(progress["duration"]))
+            except Exception:  # noqa: BLE001 - fall back to properties below
+                pass
+            item.setProperty("ResumeTime", str(progress["position"]))
+            item.setProperty("TotalTime", str(progress["duration"]))
+
+    if imdb:  # tell the service what's playing so it can persist progress
+        xbmcgui.Window(10000).setProperty(PLAYING_PROP, json.dumps({
+            "imdb": imdb, "mtype": mtype,
+            "season": season_number or 0, "episode": episode_number or 0,
+        }))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
 
@@ -198,13 +273,19 @@ def router(query_string: str) -> None:
             int(params["episode"]) if params.get("episode") else None,
         )
     elif action == "play":
-        play(params["url"])
+        play(
+            params.get("imdb", ""),
+            params.get("mtype", "movie"),
+            int(params["season"]) if params.get("season") else 0,
+            int(params["episode"]) if params.get("episode") else 0,
+            params.get("url"),
+        )
     elif action == "auth_torbox":
         auth.run_device_auth()
         xbmc.executebuiltin("Container.Refresh")
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     elif action == "continue":
-        placeholder("Continue Watching")
+        continue_watching()
     elif action == "noop":
         finish()
     else:

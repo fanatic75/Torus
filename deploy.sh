@@ -14,11 +14,13 @@ DEST="/storage/.kodi/addons/plugin.video.torus"
 
 echo "Deploying to ${BOX}:${DEST}"
 
+# NOTE: dev.config.json IS synced (over your LAN) so the box reads your local
+# TMDB key. It stays gitignored and is never committed or posted online.
 rsync -av --delete \
   --exclude '.git' \
+  --exclude '.devprofile' \
   --exclude '__pycache__' \
   --exclude '.DS_Store' \
-  --exclude 'dev.config.json' \
   --exclude 'deploy.sh' \
   --exclude 'README.md' \
   --exclude 'LICENSE' \

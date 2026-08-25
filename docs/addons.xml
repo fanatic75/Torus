@@ -24,10 +24,11 @@
         
     </extension>
 </addon>
-<addon id="repository.torus" name="Torus Repository" version="1.0.1" provider-name="Prateek Banga">
+<addon id="repository.torus" name="Torus Repository" version="1.0.2" provider-name="Prateek Banga">
     <extension point="xbmc.addon.repository" name="Torus Repository">
         <dir>
             <info compressed="false">https://fanatic75.github.io/Torus/addons.xml</info>
+            <checksum>https://fanatic75.github.io/Torus/addons.xml.md5</checksum>
             <datadir zip="true">https://fanatic75.github.io/Torus/</datadir>
         </dir>
     </extension>

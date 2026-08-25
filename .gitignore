@@ -1,0 +1,20 @@
+# --- Secrets: never commit real API keys ---
+dev.config.json
+*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- Kodi runtime artifacts (if a profile ever gets copied in) ---
+*.db
+*.log
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
+*.swp

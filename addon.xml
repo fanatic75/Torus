@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Torus — a TorBox-native media browser for Kodi.
+  The repo root IS the addon. On the device it must live in a folder named
+  after the id below (plugin.video.torus), which deploy.sh handles.
+  Target: Kodi 21 (Omega), Python 3.
+-->
+<addon id="plugin.video.torus"
+       name="Torus"
+       version="0.1.0"
+       provider-name="Prateek Banga">
+
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+        <!-- Networking deps (requests) get added in M1 when we start hitting TMDB/providers. -->
+    </requires>
+
+    <!-- The browse/play UI. Kodi calls main.py with a query string; it renders a listing. -->
+    <extension point="xbmc.python.pluginsource" library="main.py">
+        <provides>video</provides>
+    </extension>
+
+    <!-- Background service: the resume engine (player monitor). Stub in M0, real in M5. -->
+    <extension point="xbmc.service" library="service.py"/>
+
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">TorBox-native media browser with local resume</summary>
+        <description lang="en_GB">Browse movies and TV via TMDB, find instantly-playable TorBox-cached sources through Stremio-protocol providers (Comet, Torrentio), play in Kodi's native player, and resume where you left off — all stored locally, no remote account server.</description>
+        <platform>all</platform>
+        <license>MIT</license>
+        <source>https://github.com/fanatic75/Torus</source>
+        <!-- TODO: add resources/icon.png (256x256 or 512x512) and resources/fanart.jpg before first release. -->
+    </extension>
+</addon>

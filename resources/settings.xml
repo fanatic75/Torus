@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--
+  Kodi 21 (Omega) settings format (version="1").
+  Users enter their OWN keys here — nothing is shipped in the repo.
+-->
+<settings version="1">
+    <section id="plugin.video.torus">
+
+        <category id="accounts" label="Accounts">
+            <group id="1">
+                <setting id="tmdb_api_key" type="string" label="TMDB API Key">
+                    <level>0</level>
+                    <default/>
+                    <control type="edit" format="string">
+                        <heading>TMDB API Key</heading>
+                    </control>
+                </setting>
+                <setting id="torbox_api_key" type="string" label="TorBox API Key">
+                    <level>0</level>
+                    <default/>
+                    <control type="edit" format="string">
+                        <heading>TorBox API Key</heading>
+                    </control>
+                </setting>
+            </group>
+        </category>
+
+        <category id="sources" label="Sources">
+            <group id="1">
+                <setting id="provider" type="string" label="Source provider">
+                    <level>0</level>
+                    <default>comet</default>
+                    <constraints>
+                        <options>
+                            <option label="Comet (public)">comet</option>
+                            <option label="Torrentio (public)">torrentio</option>
+                        </options>
+                    </constraints>
+                    <control type="list" format="string">
+                        <heading>Source provider</heading>
+                    </control>
+                </setting>
+                <setting id="quality_profile" type="string" label="Quality profile">
+                    <level>0</level>
+                    <default>cinephile</default>
+                    <constraints>
+                        <options>
+                            <option label="Cinephile (4K/DV/REMUX, best quality)">cinephile</option>
+                            <option label="Balanced (1 link per quality)">balanced</option>
+                            <option label="Data Saver (=1080p, smallest)">datasaver</option>
+                        </options>
+                    </constraints>
+                    <control type="list" format="string">
+                        <heading>Quality profile</heading>
+                    </control>
+                </setting>
+            </group>
+        </category>
+
+    </section>
+</settings>

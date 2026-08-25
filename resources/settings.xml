@@ -16,9 +16,10 @@
             <group id="1">
                 <setting id="provider" type="string" label="30001">
                     <level>0</level>
-                    <default>comet</default>
+                    <default>both</default>
                     <constraints>
                         <options>
+                            <option label="30015">both</option>
                             <option label="30010">comet</option>
                             <option label="30011">torrentio</option>
                         </options>

@@ -96,7 +96,7 @@ def clear_torbox_token() -> None:
 
 # --- other settings --------------------------------------------------------
 def provider() -> str:
-    return get("provider", "comet")
+    return get("provider", "both")
 
 
 def quality_profile() -> str:

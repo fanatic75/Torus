@@ -43,6 +43,10 @@ msgctxt "#30011"
 msgid "Torrentio (public)"
 msgstr ""
 
+msgctxt "#30015"
+msgid "Comet + Torrentio (merge, recommended)"
+msgstr ""
+
 msgctxt "#30012"
 msgid "Cinephile (4K/DV/REMUX, best quality)"
 msgstr ""

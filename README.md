@@ -20,6 +20,8 @@ TorBox and a home-theater box (CoreELEC / AM6B+).
 - **Keyless discovery** via Cinemeta: Popular / Top-Rated / New / Search, for movies and TV.
 - **One-click Play** that auto-picks the best cached source, plus **Choose source** for a ranked
   list with quality, size, and release-group tier labels.
+- **Two source providers, merged.** Comet and Torrentio are queried in parallel and their results
+  deduped — wider coverage, and resilient if one host is slow or down.
 - **Quality-aware ranking** biased for home theater: resolution › source (REMUX › BluRay › WEB-DL)
   › **release-group tier** › HDR/Dolby Vision › lossless audio.
 - **Resume + Continue Watching**, keyed by IMDb id (never the torrent), so it survives torrents
@@ -32,8 +34,8 @@ TorBox and a home-theater box (CoreELEC / AM6B+).
 ```
 Cinemeta        → keyless, IMDb-keyed metadata (catalogs, search, artwork)
   ↓ (imdb id)
-Provider        → Stremio-protocol source addon (Comet) with your TorBox key
-  ↓                returns TorBox-cached streams, already resolved to playable URLs
+Providers       → Comet + Torrentio (queried in parallel, merged) with your TorBox key
+  ↓                return TorBox-cached streams, already resolved to playable URLs
 Ranking         → resolution › REMUX › group tier (TRaSH) › DV/HDR › lossless audio
   ↓
 Kodi player     → plays the URL (Comet → TorBox CDN)
@@ -66,7 +68,7 @@ That's it. No TMDB key, no metadata signup.
 
 Nothing is mandatory to type. Optional settings:
 
-- **Source provider** — Comet (the provider layer is pluggable for future sources).
+- **Source provider** — Comet + Torrentio merged (default), or either one alone.
 - **Quality profile** — preferred ranking bias (the default favors 4K / REMUX / Dolby Vision /
   lossless audio and reputable release groups).
 - **Route posters via proxy** — on by default; keeps posters loading behind ISP-blocked image
@@ -90,7 +92,7 @@ Torus/                       (repo root == the addon; deployed as plugin.video.t
         ├── http.py           # DoH-resolving HTTP client (defeats ISP DNS blocks)
         ├── auth.py           # TorBox device-code login (no key typing)
         ├── config.py         # settings + local token/config
-        ├── providers/        # source adapters (Comet) behind one Provider interface
+        ├── providers/        # source adapters (Comet, Torrentio) + parallel merge
         ├── ranking.py        # quality scoring
         ├── release_groups.py # TRaSH Guides release-group tiers
         ├── db.py             # SQLite: resume progress + Continue Watching
@@ -126,7 +128,8 @@ connect and the laws of your jurisdiction.
 - **[TRaSH Guides](https://trash-guides.info)** — release-group quality tiers used to rank
   reputable scene/p2p groups. Torus bundles a curated snapshot of their group tier lists.
 - **[Cinemeta](https://www.stremio.com/)** (Stremio) — keyless metadata.
-- **[Comet](https://github.com/g0ldyy/comet)** — Stremio-protocol source provider.
+- **[Comet](https://github.com/g0ldyy/comet)** and **Torrentio** — Stremio-protocol source
+  providers.
 
 ## License
 

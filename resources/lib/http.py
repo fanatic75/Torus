@@ -131,37 +131,58 @@ def resolve(host: str) -> list:
         return []
 
 
+_REDIRECT_STATUS = (301, 302, 303, 307, 308)
+
+
 def get_json(url: str, params: dict | None = None,
-             headers: dict | None = None, timeout: int = 20) -> dict:
+             headers: dict | None = None, timeout: int = 20,
+             max_redirects: int = 5) -> dict:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
-    parts = urllib.parse.urlsplit(url)
-    host = parts.hostname
-    path = parts.path + (f"?{parts.query}" if parts.query else "")
 
-    ips = resolve(host)
-    if not ips:
-        raise HttpError(f"Could not resolve {host}")
+    for _ in range(max_redirects + 1):
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+        path = parts.path + (f"?{parts.query}" if parts.query else "")
 
-    last_error = None
-    for ip in ips:
-        conn = None
-        try:
-            conn = _PinnedHTTPSConnection(host, ip, timeout)
-            conn.request("GET", path, headers=default_headers(headers))
-            response = conn.getresponse()
-            body = response.read().decode("utf-8")
-            if response.status >= 400:
-                raise HttpError(f"HTTP {response.status} for {url}")
-            return json.loads(body)
-        except HttpError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - try the next IP
-            last_error = exc
-        finally:
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-    raise HttpError(f"Request failed for {url}: {last_error}")
+        ips = resolve(host)
+        if not ips:
+            raise HttpError(f"Could not resolve {host}")
+
+        redirect_to = None
+        last_error = None
+        for ip in ips:
+            conn = None
+            try:
+                conn = _PinnedHTTPSConnection(host, ip, timeout)
+                conn.request("GET", path, headers=default_headers(headers))
+                response = conn.getresponse()
+                if response.status in _REDIRECT_STATUS:
+                    location = response.getheader("Location")
+                    response.read()
+                    if not location:
+                        raise HttpError(f"redirect without Location for {url}")
+                    # urljoin handles both absolute and relative Location values.
+                    redirect_to = urllib.parse.urljoin(url, location)
+                    break
+                body = response.read().decode("utf-8")
+                if response.status >= 400:
+                    raise HttpError(f"HTTP {response.status} for {url}")
+                return json.loads(body)
+            except HttpError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - try the next IP
+                last_error = exc
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        if redirect_to:
+            url = redirect_to
+            continue
+        raise HttpError(f"Request failed for {url}: {last_error}")
+
+    raise HttpError(f"Too many redirects for {url}")

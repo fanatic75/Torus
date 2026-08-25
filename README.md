@@ -19,7 +19,7 @@ TorBox and a home-theater box (CoreELEC / AM6B+).
 ## How it works
 
 ```
-TMDB            → discovery, artwork, metadata, and TMDB→IMDb id
+Cinemeta        → keyless, IMDb-keyed metadata (catalogs, search, artwork)
   ↓ (imdb id)
 Provider        → Stremio-protocol addon (Comet/Torrentio) with your TorBox key
   ↓                returns TorBox-cached streams, already resolved to playable URLs
@@ -30,9 +30,12 @@ Kodi player     → plays the URL
 SQLite (local)  → resume position + continue-watching + watchlist, keyed by IMDb id
 ```
 
-Nothing is scraped locally and no server is required: source discovery, TorBox cache-checking,
-and URL resolution are all done by the hosted provider. Watch-state is keyed on **IMDb id, never
-on the torrent hash**, so a different cached release tomorrow still resumes correctly.
+Nothing is scraped locally and no server is required. Metadata comes from **Cinemeta** (Stremio's
+public, keyless metadata API — no API key to sign up for or bundle), and source discovery, TorBox
+cache-checking, and URL resolution are all done by the hosted provider. Watch-state is keyed on
+**IMDb id, never on the torrent hash**, so a different cached release tomorrow still resumes
+correctly. Behind ISP DNS blocks (e.g. TMDB/Cinemeta blocked in India), the addon resolves hosts
+over DoH and proxies images, so it works with no network configuration.
 
 ## Architecture
 
@@ -42,32 +45,33 @@ Torus/                     (repo root == the addon; deployed as plugin.video.tor
 ├── main.py                # router / UI entry point
 ├── service.py             # background player-monitor (resume engine)
 └── resources/
-    ├── settings.xml        # user enters their own TMDB + TorBox keys
+    ├── settings.xml        # provider + quality + optional advanced overrides
     └── lib/
-        ├── tmdb.py         # discovery / search / detail / external_ids   [M1]
-        ├── providers/      # comet, torrentio, ... behind one interface   [M2]
-        ├── ranking.py      # release parsing + quality scoring            [M4]
-        ├── playback.py     # resolve → setResolvedUrl → resume props      [M3/M5]
-        ├── db.py           # SQLite (progress, watchlist, tmdb cache)     [M5]
-        └── kodi/           # ListItem / view builders                     [M1+]
+        ├── cinemeta.py     # keyless IMDb-keyed metadata (catalogs/search/detail) [M1]
+        ├── http.py         # DoH-resolving HTTP client (defeats ISP DNS blocks)   [M1]
+        ├── auth.py         # TorBox device-code login (no key typing)             [M1]
+        ├── providers/      # comet, torrentio, ... behind one interface           [M2]
+        ├── ranking.py      # release parsing + quality scoring                    [M2/M4]
+        ├── db.py           # SQLite (progress, watchlist)                         [M5]
+        └── kodi/           # ListItem / view builders                            [M1+]
 ```
 
 ## Requirements
 
 - Kodi **21 (Omega)** — developed/tested against CoreELEC.
-- A **paid TorBox account** + API key.
-- A free **TMDB API key**.
+- A **paid TorBox account** (linked in-app via device code — no key typing).
+
+No TMDB key, no metadata signup: discovery uses Cinemeta, which is keyless.
 
 ## Configuration
 
-Open **Settings** on the addon and enter:
+There's nothing mandatory to type. On first run, open **🔗 Link your TorBox account** from the
+home screen and approve the short code on your phone. Optional settings:
 
-- **TMDB API Key** — themoviedb.org → Settings → API.
-- **TorBox API Key** — TorBox → Settings → API.
 - **Source provider** — Comet (default) or Torrentio.
 - **Quality profile** — Cinephile / Balanced / Data Saver.
-
-Keys are stored locally in Kodi's addon settings and are never bundled with the code.
+- **Route posters via proxy** — on by default; helps behind ISP-blocked image hosts.
+- Advanced: optional TMDB/TorBox key overrides (not needed for normal use).
 
 ## Development
 

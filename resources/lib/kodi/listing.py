@@ -1,105 +1,87 @@
-"""Build Kodi ListItems from TMDB dicts.
+"""Build Kodi ListItems from Cinemeta metadata dicts.
 
-Uses the Kodi 21 (Omega) InfoTagVideo setters (getVideoInfoTag()), not the
-deprecated setInfo() dict. Rich art + metadata here is what lets a good skin
-render the Stremio-like poster rows without us drawing any custom UI.
+Uses the Kodi 21 (Omega) InfoTagVideo setters. Rich art + metadata here is what
+lets a good skin render Stremio-like poster rows without custom UI code.
 """
 import xbmcgui
 
-from .. import tmdb
+from .. import cinemeta
 
 
-def _year(date_str: str | None) -> int | None:
-    if date_str and len(date_str) >= 4 and date_str[:4].isdigit():
-        return int(date_str[:4])
-    return None
+def _year(release_info) -> int | None:
+    text = str(release_info or "")[:4]
+    return int(text) if text.isdigit() else None
 
 
-def movie_item(movie: dict) -> xbmcgui.ListItem:
-    item = xbmcgui.ListItem(label=movie.get("title", ""))
+def _apply_common(item: xbmcgui.ListItem, meta: dict):
     tag = item.getVideoInfoTag()
-    tag.setMediaType("movie")
-    tag.setTitle(movie.get("title", ""))
-    tag.setPlot(movie.get("overview", ""))
-    year = _year(movie.get("release_date"))
+    tag.setTitle(meta.get("name", ""))
+    tag.setPlot(meta.get("description", "") or "")
+    year = _year(meta.get("releaseInfo"))
     if year:
         tag.setYear(year)
-    if movie.get("vote_average"):
-        tag.setRating(float(movie["vote_average"]))
-    ids = {"tmdb": str(movie["id"])}
-    imdb = movie.get("external_ids", {}).get("imdb_id")
+    rating = meta.get("imdbRating")
+    if rating:
+        try:
+            tag.setRating(float(rating))
+        except (TypeError, ValueError):
+            pass
+    genres = meta.get("genres") or []
+    if genres:
+        tag.setGenres(genres)
+    imdb = meta.get("id") or meta.get("imdb_id") or ""
     if imdb:
-        ids["imdb"] = imdb
-    tag.setUniqueIDs(ids, "tmdb")
-    poster = tmdb.poster(movie.get("poster_path"))
+        tag.setUniqueIDs({"imdb": imdb}, "imdb")
+    return tag
+
+
+def catalog_item(meta: dict) -> xbmcgui.ListItem:
+    item = xbmcgui.ListItem(label=meta.get("name", ""))
+    tag = _apply_common(item, meta)
+    tag.setMediaType("movie" if meta.get("type") == "movie" else "tvshow")
+    poster = cinemeta.image(meta.get("poster"))
     item.setArt({
         "poster": poster,
         "thumb": poster,
-        "fanart": tmdb.backdrop(movie.get("backdrop_path")),
+        "fanart": cinemeta.image(meta.get("background")),
     })
     return item
 
 
-def tvshow_item(show: dict) -> xbmcgui.ListItem:
-    item = xbmcgui.ListItem(label=show.get("name", ""))
-    tag = item.getVideoInfoTag()
-    tag.setMediaType("tvshow")
-    tag.setTitle(show.get("name", ""))
-    tag.setPlot(show.get("overview", ""))
-    year = _year(show.get("first_air_date"))
-    if year:
-        tag.setYear(year)
-    if show.get("vote_average"):
-        tag.setRating(float(show["vote_average"]))
-    ids = {"tmdb": str(show["id"])}
-    imdb = show.get("external_ids", {}).get("imdb_id")
-    if imdb:
-        ids["imdb"] = imdb
-    tag.setUniqueIDs(ids, "tmdb")
-    poster = tmdb.poster(show.get("poster_path"))
-    item.setArt({
-        "poster": poster,
-        "thumb": poster,
-        "fanart": tmdb.backdrop(show.get("backdrop_path")),
-    })
-    return item
-
-
-def season_item(show: dict, season: dict) -> xbmcgui.ListItem:
-    label = season.get("name") or f"Season {season.get('season_number')}"
-    item = xbmcgui.ListItem(label=label)
+def season_item(show: dict, season_number: int) -> xbmcgui.ListItem:
+    item = xbmcgui.ListItem(label=f"Season {season_number}")
     tag = item.getVideoInfoTag()
     tag.setMediaType("season")
-    tag.setTitle(label)
+    tag.setTitle(f"Season {season_number}")
     tag.setTvShowTitle(show.get("name", ""))
-    tag.setPlot(season.get("overview", ""))
-    if season.get("season_number") is not None:
-        tag.setSeason(int(season["season_number"]))
-    poster = tmdb.poster(season.get("poster_path") or show.get("poster_path"))
-    item.setArt({"poster": poster, "thumb": poster,
-                 "fanart": tmdb.backdrop(show.get("backdrop_path"))})
+    tag.setSeason(int(season_number))
+    poster = cinemeta.image(show.get("poster"))
+    item.setArt({
+        "poster": poster,
+        "thumb": poster,
+        "fanart": cinemeta.image(show.get("background")),
+    })
     return item
 
 
-def episode_item(show: dict, episode: dict) -> xbmcgui.ListItem:
-    number = episode.get("episode_number")
-    label = f"{number}. {episode.get('name', '')}".strip(". ")
-    item = xbmcgui.ListItem(label=label)
+def episode_item(show: dict, video: dict) -> xbmcgui.ListItem:
+    number = video.get("episode", 0)
+    name = video.get("name", "")
+    item = xbmcgui.ListItem(label=f"{number}. {name}".strip(". "))
     tag = item.getVideoInfoTag()
     tag.setMediaType("episode")
-    tag.setTitle(episode.get("name", ""))
+    tag.setTitle(name)
     tag.setTvShowTitle(show.get("name", ""))
-    tag.setPlot(episode.get("overview", ""))
-    if episode.get("season_number") is not None:
-        tag.setSeason(int(episode["season_number"]))
-    if number is not None:
+    if video.get("season") is not None:
+        tag.setSeason(int(video.get("season", 0)))
+    if number:
         tag.setEpisode(int(number))
-    if episode.get("vote_average"):
-        tag.setRating(float(episode["vote_average"]))
-    still = tmdb.backdrop(episode.get("still_path"), size="w780")
+    tag.setPlot(video.get("overview", "") or "")
+    poster = cinemeta.image(show.get("poster"))
+    thumb = cinemeta.image(video.get("thumbnail")) or poster
     item.setArt({
-        "thumb": still,
-        "fanart": tmdb.backdrop(show.get("backdrop_path")),
-        "poster": tmdb.poster(show.get("poster_path")),
+        "thumb": thumb,
+        "poster": poster,
+        "fanart": cinemeta.image(show.get("background")),
     })
     return item

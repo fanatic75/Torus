@@ -3,12 +3,11 @@
 Kodi invokes this file for every navigation action with three argv values:
     argv[0] -> base plugin url, e.g. "plugin://plugin.video.torus/"
     argv[1] -> the integer handle Kodi expects us to fill with a directory
-    argv[2] -> the query string, e.g. "?action=catalog&kind=movie&list=trending"
+    argv[2] -> the query string, e.g. "?action=catalog&mtype=movie&cat=top"
 
-The model is stateless request/response: parse the action, build a listing,
-call endOfDirectory, exit. `router()` is the HTTP-router analogue.
-
-M1 scope: TMDB discovery. Playable leaves are placeholders until M3.
+Stateless request/response: parse the action, build a listing, endOfDirectory,
+exit. Metadata is Cinemeta (keyless, IMDb-keyed); sources come from the provider
+layer (Comet) and play via setResolvedUrl.
 """
 import sys
 from urllib.parse import urlencode, parse_qsl
@@ -17,7 +16,7 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
-from resources.lib import auth, config, providers, ranking, tmdb
+from resources.lib import auth, cinemeta, config, providers, ranking
 from resources.lib.http import HttpError, log
 from resources.lib.kodi import listing
 
@@ -25,14 +24,14 @@ HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
 
-# --- url + item helpers ----------------------------------------------------
+# --- helpers ---------------------------------------------------------------
 def build_url(**kwargs) -> str:
     return f"{BASE_URL}?{urlencode(kwargs)}"
 
 
-def add_directory(label: str, action: str, art: dict | None = None, **extra) -> None:
+def add_directory(label: str, action: str, **extra) -> None:
     item = xbmcgui.ListItem(label=label)
-    item.setArt(art or {"icon": "DefaultFolder.png"})
+    item.setArt({"icon": "DefaultFolder.png"})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(action=action, **extra), item, isFolder=True)
 
 
@@ -50,111 +49,90 @@ def notify(message: str) -> None:
     xbmcgui.Dialog().notification("Torus", message, xbmcgui.NOTIFICATION_WARNING)
 
 
-# --- views -----------------------------------------------------------------
+# --- menus -----------------------------------------------------------------
 def home() -> None:
-    # First-run onboarding: link TorBox with the device-code flow (no typing).
     if not config.torbox_token():
         link = xbmcgui.ListItem(label="🔗  Link your TorBox account")
         link.setArt({"icon": "DefaultAddonService.png"})
-        xbmcplugin.addDirectoryItem(
-            HANDLE, build_url(action="auth_torbox"), link, isFolder=False
-        )
-    add_directory("Movies", "movies")
-    add_directory("TV Shows", "tv")
+        xbmcplugin.addDirectoryItem(HANDLE, build_url(action="auth_torbox"), link, isFolder=False)
+    add_directory("Movies", "menu", mtype="movie")
+    add_directory("TV Shows", "menu", mtype="series")
     add_directory("Search", "search_menu")
     add_directory("Continue Watching", "continue")
     finish()
 
 
-def movies_menu() -> None:
-    add_directory("Trending", "catalog", kind="movie", list="trending")
-    add_directory("Popular", "catalog", kind="movie", list="popular")
-    add_directory("Search Movies", "search", kind="movie")
-    finish()
-
-
-def tv_menu() -> None:
-    add_directory("Trending", "catalog", kind="tv", list="trending")
-    add_directory("Popular", "catalog", kind="tv", list="popular")
-    add_directory("Search TV", "search", kind="tv")
+def menu(mtype: str) -> None:
+    add_directory("Popular", "catalog", mtype=mtype, cat="top")
+    add_directory("Top Rated", "catalog", mtype=mtype, cat="imdbRating")
+    add_directory("New", "catalog", mtype=mtype, cat="year")
+    add_directory("Search", "search", mtype=mtype)
     finish()
 
 
 def search_menu() -> None:
-    add_directory("Search Movies", "search", kind="movie")
-    add_directory("Search TV", "search", kind="tv")
+    add_directory("Search Movies", "search", mtype="movie")
+    add_directory("Search TV Shows", "search", mtype="series")
     finish()
 
 
-_CATALOG = {
-    ("movie", "trending"): tmdb.trending_movies,
-    ("movie", "popular"): tmdb.popular_movies,
-    ("tv", "trending"): tmdb.trending_tv,
-    ("tv", "popular"): tmdb.popular_tv,
-}
+# --- catalogs + search -----------------------------------------------------
+def _render(mtype: str, metas: list) -> None:
+    for meta in metas:
+        imdb = meta.get("id") or meta.get("imdb_id")
+        if not imdb:
+            continue
+        add_item(listing.catalog_item(meta), True,
+                 action="detail", imdb=imdb, mtype=mtype)
+    finish("movies" if mtype == "movie" else "tvshows")
 
 
-def catalog(kind: str, list_name: str) -> None:
-    results = _CATALOG[(kind, list_name)]()
-    _render_results(kind, results)
+def catalog(mtype: str, cat: str) -> None:
+    _render(mtype, cinemeta.catalog(mtype, cat))
 
 
-def search(kind: str) -> None:
+def search(mtype: str) -> None:
     query = xbmcgui.Dialog().input("Search", type=xbmcgui.INPUT_ALPHANUM)
     if not query:
         finish()
         return
-    results = tmdb.search_movies(query) if kind == "movie" else tmdb.search_tv(query)
-    _render_results(kind, results)
+    _render(mtype, cinemeta.catalog(mtype, "top", search=query))
 
 
-def _render_results(kind: str, results: list) -> None:
-    if kind == "movie":
-        for movie in results:
-            add_item(listing.movie_item(movie), True,
-                     action="movie_detail", tmdb_id=movie["id"])
+# --- detail ----------------------------------------------------------------
+def detail(imdb: str, mtype: str) -> None:
+    meta = cinemeta.meta(mtype, imdb)
+    if mtype == "movie":
+        find = listing.catalog_item(meta)
+        find.setLabel(f"▶  Find sources — {meta.get('name', '')}")
+        add_item(find, True, action="sources", imdb=imdb, mtype="movie")
         finish("movies")
-    else:
-        for show in results:
-            add_item(listing.tvshow_item(show), True,
-                     action="tv_detail", tmdb_id=show["id"])
-        finish("tvshows")
-
-
-def movie_detail(tmdb_id: int) -> None:
-    detail = tmdb.movie_detail(tmdb_id)
-    imdb = detail.get("external_ids", {}).get("imdb_id", "")
-    # Find playable TorBox-cached sources for this movie.
-    find = listing.movie_item(detail)
-    find.setLabel(f"▶  Find sources — {detail.get('title', '')}")
-    add_item(find, True, action="sources", imdb=imdb, mtype="movie")
-    # Similar titles, browsable.
-    for movie in detail.get("similar", {}).get("results", []):
-        add_item(listing.movie_item(movie), True,
-                 action="movie_detail", tmdb_id=movie["id"])
-    finish("movies")
-
-
-def tv_detail(tmdb_id: int) -> None:
-    detail = tmdb.tv_detail(tmdb_id)
-    for season in detail.get("seasons", []):
-        item = listing.season_item(detail, season)
-        add_item(item, True, action="season",
-                 tmdb_id=tmdb_id, season=season.get("season_number", 0))
+        return
+    # series: list seasons derived from the episode videos
+    seasons = sorted({
+        v.get("season", 0) for v in meta.get("videos", [])
+        if v.get("season", 0) and v.get("season", 0) > 0
+    })
+    for season_number in seasons:
+        add_item(listing.season_item(meta, season_number), True,
+                 action="season", imdb=imdb, season=season_number)
     finish("seasons")
 
 
-def season(tmdb_id: int, season_number: int) -> None:
-    show = tmdb.tv_detail(tmdb_id)
-    imdb = show.get("external_ids", {}).get("imdb_id", "")
-    data = tmdb.tv_season(tmdb_id, season_number)
-    for episode in data.get("episodes", []):
-        item = listing.episode_item(show, episode)
-        add_item(item, True, action="sources", imdb=imdb, mtype="series",
-                 season=season_number, episode=episode.get("episode_number", 0))
+def season(imdb: str, season_number: int) -> None:
+    meta = cinemeta.meta("series", imdb)
+    episodes = sorted(
+        (v for v in meta.get("videos", []) if v.get("season") == season_number),
+        key=lambda v: v.get("episode", 0),
+    )
+    for video in episodes:
+        add_item(listing.episode_item(meta, video), True,
+                 action="sources", imdb=imdb, mtype="series",
+                 season=season_number, episode=video.get("episode", 0))
     finish("episodes")
 
 
+# --- sources + playback ----------------------------------------------------
 def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> None:
     if not imdb:
         notify("No IMDb id found for this title")
@@ -166,9 +144,7 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
         return
 
     provider = providers.get_provider()
-    streams = ranking.rank(
-        provider.search(imdb, mtype, season_number, episode_number)
-    )
+    streams = ranking.rank(provider.search(imdb, mtype, season_number, episode_number))
     if not streams:
         notify("No cached sources found")
 
@@ -201,25 +177,19 @@ def router(query_string: str) -> None:
     action = params.get("action")
 
     if not action:
-        if not config.tmdb_key():
-            notify("Set your TMDB API key in Torus settings")
         home()
-    elif action == "movies":
-        movies_menu()
-    elif action == "tv":
-        tv_menu()
+    elif action == "menu":
+        menu(params["mtype"])
     elif action == "search_menu":
         search_menu()
     elif action == "catalog":
-        catalog(params["kind"], params["list"])
+        catalog(params["mtype"], params["cat"])
     elif action == "search":
-        search(params["kind"])
-    elif action == "movie_detail":
-        movie_detail(int(params["tmdb_id"]))
-    elif action == "tv_detail":
-        tv_detail(int(params["tmdb_id"]))
+        search(params["mtype"])
+    elif action == "detail":
+        detail(params["imdb"], params["mtype"])
     elif action == "season":
-        season(int(params["tmdb_id"]), int(params["season"]))
+        season(params["imdb"], int(params["season"]))
     elif action == "sources":
         sources(
             params.get("imdb", ""),
@@ -246,7 +216,7 @@ if __name__ == "__main__":
         router(sys.argv[2][1:])
     except HttpError as exc:
         log(f"network error: {exc}")
-        notify("Network/API error — check your TMDB key")
+        notify("Network/API error — check your connection")
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     except Exception as exc:  # noqa: BLE001 - last-resort guard so Kodi never hangs
         log(f"unhandled error: {exc}")

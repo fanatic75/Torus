@@ -22,6 +22,8 @@ from resources.lib.http import HttpError, log
 from resources.lib.kodi import listing
 
 PLAYING_PROP = "torus.playing"
+# Rewind a few seconds on resume so it's easy to pick up where you left off.
+RESUME_REWIND = 10
 
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
@@ -224,13 +226,14 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) ->
     if progress and progress.get("duration"):
         ratio = progress["position"] / progress["duration"]
         if 0.01 < ratio < 0.95:
+            duration = float(progress["duration"])
+            resume_at = max(0.0, float(progress["position"]) - RESUME_REWIND)
             try:
-                item.getVideoInfoTag().setResumePoint(
-                    float(progress["position"]), float(progress["duration"]))
+                item.getVideoInfoTag().setResumePoint(resume_at, duration)
             except Exception:  # noqa: BLE001 - fall back to properties below
                 pass
-            item.setProperty("ResumeTime", str(progress["position"]))
-            item.setProperty("TotalTime", str(progress["duration"]))
+            item.setProperty("ResumeTime", str(resume_at))
+            item.setProperty("TotalTime", str(duration))
 
     if imdb:  # tell the service what's playing so it can persist progress
         xbmcgui.Window(10000).setProperty(PLAYING_PROP, json.dumps({

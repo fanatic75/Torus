@@ -18,12 +18,17 @@ import zipfile
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ADDON = "plugin.video.torus"
 REPO = "repository.torus"
-REPO_VERSION = "1.0.2"
+REPO_VERSION = "1.0.3"
 GH_USER = "fanatic75"
 # Published via GitHub Pages (main branch /docs), served at the site root — a
 # short source URL like POV's kodifitzwell.github.io/repo/.
 PUBLISH_DIR = "docs"
-DATADIR = f"https://{GH_USER}.github.io/Torus/"
+# Human-facing source URL (short) — used to add the source and install the repo zip.
+SOURCE_URL = f"https://{GH_USER}.github.io/Torus/"
+# The repository fetches UPDATES from raw.githubusercontent: github.io's CDN
+# behaviour makes Kodi's checksum read fail, while raw works reliably (it's what
+# other working repos use). Same files, different host.
+DATADIR = f"https://raw.githubusercontent.com/{GH_USER}/Torus/main/{PUBLISH_DIR}/"
 
 # Dev-only paths that must never ship inside the addon zip.
 EXCLUDE_DIRS = {".git", "repo", "docs", "build", "__pycache__", ".devprofile",
@@ -219,7 +224,7 @@ def write_dir_indexes(version: str) -> None:
 
 def write_index_html(version: str) -> None:
     html = (INDEX_TEMPLATE
-            .replace("__SOURCE_URL__", DATADIR)
+            .replace("__SOURCE_URL__", SOURCE_URL)
             .replace("__ADDON_ZIP__", f"plugin.video.torus/plugin.video.torus-{version}.zip")
             .replace("__REPO_ZIP__", f"repository.torus/repository.torus-{REPO_VERSION}.zip")
             .replace("__GH__", f"https://github.com/{GH_USER}/Torus")

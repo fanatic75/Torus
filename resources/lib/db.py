@@ -36,6 +36,15 @@ def _connect() -> sqlite3.Connection:
             conn.execute(f"ALTER TABLE progress ADD COLUMN {ddl}")
         except sqlite3.OperationalError:
             pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS watchlist (
+            imdb TEXT PRIMARY KEY,
+            mtype TEXT,
+            name TEXT DEFAULT '',
+            poster TEXT DEFAULT '',
+            added_at INTEGER
+        )
+    """)
     return conn
 
 
@@ -106,6 +115,55 @@ def clear_progress(imdb, season=0, episode=0) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+# --- watchlist -------------------------------------------------------------
+def add_watchlist(imdb, mtype, name="", poster="") -> None:
+    conn = _connect()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO watchlist (imdb, mtype, name, poster, added_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (imdb, mtype, name, poster, int(time.time())))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def remove_watchlist(imdb) -> None:
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM watchlist WHERE imdb=?", (imdb,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def in_watchlist(imdb) -> bool:
+    conn = _connect()
+    try:
+        return conn.execute("SELECT 1 FROM watchlist WHERE imdb=?", (imdb,)).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def watchlist_ids() -> set:
+    conn = _connect()
+    try:
+        return {r[0] for r in conn.execute("SELECT imdb FROM watchlist").fetchall()}
+    finally:
+        conn.close()
+
+
+def list_watchlist(limit=300) -> list[dict]:
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT imdb, mtype, name, poster FROM watchlist ORDER BY added_at DESC LIMIT ?",
+            (limit,)).fetchall()
+    finally:
+        conn.close()
+    return [dict(zip(("imdb", "mtype", "name", "poster"), r)) for r in rows]
 
 
 RETENTION_DAYS = 365

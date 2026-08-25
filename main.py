@@ -64,6 +64,7 @@ def home() -> None:
     add_directory("TV Shows", "menu", mtype="series")
     add_directory("Search", "search_menu")
     add_directory("Continue Watching", "continue")
+    add_directory("My List", "watchlist")
     finish()
 
 
@@ -83,12 +84,16 @@ def search_menu() -> None:
 
 # --- catalogs + search -----------------------------------------------------
 def _render(mtype: str, metas: list) -> None:
+    watchlisted = db.watchlist_ids()
     for meta in metas:
         imdb = meta.get("id") or meta.get("imdb_id")
         if not imdb:
             continue
-        add_item(listing.catalog_item(meta), True,
-                 action="detail", imdb=imdb, mtype=mtype)
+        item = listing.catalog_item(meta)
+        item.addContextMenuItems(
+            _watchlist_ctx(imdb, mtype, meta.get("name", ""), meta.get("poster", ""),
+                           imdb in watchlisted))
+        add_item(item, True, action="detail", imdb=imdb, mtype=mtype)
     finish("movies" if mtype == "movie" else "tvshows")
 
 
@@ -112,6 +117,24 @@ def _choose_source_ctx(imdb, mtype, season_number=0, episode_number=0):
     return [("Choose source", f"Container.Update({url})")]
 
 
+def _watchlist_ctx(imdb, mtype, name, poster, in_list):
+    """Context-menu entry to add/remove a title from My List."""
+    if in_list:
+        return [("Remove from My List",
+                 f"RunPlugin({build_url(action='wl_remove', imdb=imdb)})")]
+    return [("Add to My List",
+             f"RunPlugin({build_url(action='wl_add', imdb=imdb, mtype=mtype, name=name, poster=poster)})")]
+
+
+def _add_watchlist_toggle(imdb, mtype, meta):
+    """Visible Add/Remove My List item for a detail page."""
+    in_list = db.in_watchlist(imdb)
+    item = xbmcgui.ListItem(
+        label="★  Remove from My List" if in_list else "☆  Add to My List")
+    add_item(item, False, action="wl_remove" if in_list else "wl_add",
+             imdb=imdb, mtype=mtype, name=meta.get("name", ""), poster=meta.get("poster", ""))
+
+
 def detail(imdb: str, mtype: str) -> None:
     meta = cinemeta.meta(mtype, imdb)
     if mtype == "movie":
@@ -123,9 +146,11 @@ def detail(imdb: str, mtype: str) -> None:
         # Explicit source picker too.
         choose = xbmcgui.ListItem(label="☰  Choose source")
         add_item(choose, True, action="sources", imdb=imdb, mtype="movie")
+        _add_watchlist_toggle(imdb, "movie", meta)
         finish("movies")
         return
     # series: list seasons derived from the episode videos
+    _add_watchlist_toggle(imdb, "series", meta)
     seasons = sorted({
         v.get("season", 0) for v in meta.get("videos", [])
         if v.get("season", 0) and v.get("season", 0) > 0
@@ -230,6 +255,41 @@ def _resolve_best(imdb, mtype, season_number, episode_number) -> str | None:
     return streams[0].url if streams else None
 
 
+def watchlist() -> None:
+    rows = db.list_watchlist()
+    if not rows:
+        item = xbmcgui.ListItem(label="Your list is empty — add titles from any movie or show")
+        add_item(item, False, action="noop")
+        finish()
+        return
+    for row in rows:
+        meta_like = {"id": row["imdb"], "name": row["name"],
+                     "type": row["mtype"], "poster": row["poster"]}
+        item = listing.catalog_item(meta_like)
+        item.addContextMenuItems(
+            _watchlist_ctx(row["imdb"], row["mtype"], row["name"], row["poster"], True))
+        add_item(item, True, action="detail", imdb=row["imdb"], mtype=row["mtype"])
+    finish("movies")
+
+
+def _after_watchlist_change() -> None:
+    if HANDLE >= 0:  # a clicked toggle item; RunPlugin context-menu passes handle -1
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+    xbmc.executebuiltin("Container.Refresh")
+
+
+def wl_add(imdb, mtype="movie", name="", poster="") -> None:
+    db.add_watchlist(imdb, mtype, name, poster)
+    xbmcgui.Dialog().notification("Torus", "Added to My List", xbmcgui.NOTIFICATION_INFO)
+    _after_watchlist_change()
+
+
+def wl_remove(imdb) -> None:
+    db.remove_watchlist(imdb)
+    xbmcgui.Dialog().notification("Torus", "Removed from My List", xbmcgui.NOTIFICATION_INFO)
+    _after_watchlist_change()
+
+
 def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) -> None:
     progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
 
@@ -319,6 +379,13 @@ def router(query_string: str) -> None:
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     elif action == "continue":
         continue_watching()
+    elif action == "watchlist":
+        watchlist()
+    elif action == "wl_add":
+        wl_add(params.get("imdb", ""), params.get("mtype", "movie"),
+               params.get("name", ""), params.get("poster", ""))
+    elif action == "wl_remove":
+        wl_remove(params.get("imdb", ""))
     elif action == "noop":
         finish()
     else:

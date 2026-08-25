@@ -25,7 +25,7 @@
 
     <extension point="xbmc.addon.metadata">
         <summary lang="en_GB">TorBox-native media browser with local resume</summary>
-        <description lang="en_GB">Browse movies and TV via TMDB, find instantly-playable TorBox-cached sources through Stremio-protocol providers (Comet, Torrentio), play in Kodi's native player, and resume where you left off — all stored locally, no remote account server.</description>
+        <description lang="en_GB">Browse movies and TV with keyless Cinemeta metadata, find instantly-playable TorBox-cached sources via Comet and Torrentio, play in Kodi's native player, and resume where you left off. No API keys — TorBox is linked with a device code, everything else is stored locally.</description>
         <platform>all</platform>
         <license>MIT</license>
         <source>https://github.com/fanatic75/Torus</source>

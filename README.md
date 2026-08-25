@@ -59,12 +59,27 @@ That's it. No TMDB key, no metadata signup.
 
 ## Install
 
-1. Get the addon folder onto the device as `plugin.video.torus` (clone this repo, or download a
-   zip of it). The repo root *is* the addon.
-2. In Kodi: **Settings → Add-ons → Install from zip file** (or copy the folder into
-   `.kodi/addons/` and enable it).
-3. Open Torus and choose **🔗 Link your TorBox account** — approve the short code shown, on your
-   phone at `tor.box/link`. Done.
+First, allow third-party addons: **Settings → System → Add-ons → Unknown sources → On**.
+
+### Option A — repository (recommended, auto-updates)
+
+1. **Settings → File manager → Add source**, enter this URL and name it `Torus`:
+   `https://raw.githubusercontent.com/fanatic75/Torus/main/repo/`
+2. **Add-ons → Install from zip file → Torus → repository.torus →** `repository.torus-1.0.0.zip`.
+3. **Add-ons → Install from repository → Torus Repository → Video add-ons → Torus → Install.**
+
+You'll get new versions automatically from then on.
+
+### Option B — single zip (no auto-updates)
+
+Download `repo/plugin.video.torus/plugin.video.torus-<version>.zip` from this repo and use
+**Add-ons → Install from zip file**. (The plain GitHub "Download ZIP" of the repo will *not*
+install — Kodi needs the inner folder named `plugin.video.torus`, which only the packaged zip has.)
+
+### Then
+
+Open Torus and choose **🔗 Link your TorBox account** — approve the short code shown, on your
+phone at `tor.box/link`. Done.
 
 ## Configuration
 

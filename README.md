@@ -109,6 +109,15 @@ Torus is a client for services you configure and pay for (TorBox) and public met
 hosts no content and ships no indexers. Use it in accordance with the terms of the services you
 connect and the laws of your jurisdiction.
 
+## Credits
+
+- **[TRaSH Guides](https://trash-guides.info)** — release-group quality tiers used
+  to rank reputable scene/p2p groups. Torus bundles a curated snapshot of their
+  group tier lists.
+- **[Cinemeta](https://www.stremio.com/)** (Stremio) — keyless metadata.
+- **[Comet](https://github.com/g0ldyy/comet)** / **[Torrentio]** — Stremio-protocol
+  source providers.
+
 ## License
 
 [MIT](LICENSE) © 2026 Prateek Banga

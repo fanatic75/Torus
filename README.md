@@ -69,8 +69,6 @@ That's it. No TMDB key, no metadata signup.
 Nothing is mandatory to type. Optional settings:
 
 - **Source provider** — Comet + Torrentio merged (default), or either one alone.
-- **Quality profile** — preferred ranking bias (the default favors 4K / REMUX / Dolby Vision /
-  lossless audio and reputable release groups).
 - **Route posters via proxy** — on by default; keeps posters loading behind ISP-blocked image
   hosts.
 - **Auto-delete old resume points** — off by default (Continue Watching just shows the 40 most

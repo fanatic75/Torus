@@ -99,10 +99,6 @@ def provider() -> str:
     return get("provider", "both")
 
 
-def quality_profile() -> str:
-    return get("quality_profile", "cinephile")
-
-
 def image_proxy() -> bool:
     """Route poster/backdrop images through a proxy so ISP-blocked image hosts
     (e.g. image.tmdb.org behind Jio) still load in Kodi's image loader."""

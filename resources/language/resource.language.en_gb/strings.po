@@ -15,10 +15,6 @@ msgctxt "#30001"
 msgid "Source provider"
 msgstr ""
 
-msgctxt "#30002"
-msgid "Quality profile"
-msgstr ""
-
 msgctxt "#30003"
 msgid "Advanced"
 msgstr ""
@@ -45,18 +41,6 @@ msgstr ""
 
 msgctxt "#30015"
 msgid "Comet + Torrentio (merge, recommended)"
-msgstr ""
-
-msgctxt "#30012"
-msgid "Cinephile (4K/DV/REMUX, best quality)"
-msgstr ""
-
-msgctxt "#30013"
-msgid "Balanced (1 link per quality)"
-msgstr ""
-
-msgctxt "#30014"
-msgid "Data Saver (1080p, smallest)"
 msgstr ""
 
 msgctxt "#30020"

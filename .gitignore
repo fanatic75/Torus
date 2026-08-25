@@ -18,3 +18,6 @@ venv/
 .idea/
 .vscode/
 *.swp
+
+# local dev profile (tokens etc.)
+.devprofile/

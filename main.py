@@ -13,10 +13,11 @@ M1 scope: TMDB discovery. Playable leaves are placeholders until M3.
 import sys
 from urllib.parse import urlencode, parse_qsl
 
+import xbmc
 import xbmcgui
 import xbmcplugin
 
-from resources.lib import config, tmdb
+from resources.lib import auth, config, tmdb
 from resources.lib.http import HttpError, log
 from resources.lib.kodi import listing
 
@@ -51,6 +52,13 @@ def notify(message: str) -> None:
 
 # --- views -----------------------------------------------------------------
 def home() -> None:
+    # First-run onboarding: link TorBox with the device-code flow (no typing).
+    if not config.torbox_token():
+        link = xbmcgui.ListItem(label="🔗  Link your TorBox account")
+        link.setArt({"icon": "DefaultAddonService.png"})
+        xbmcplugin.addDirectoryItem(
+            HANDLE, build_url(action="auth_torbox"), link, isFolder=False
+        )
     add_directory("Movies", "movies")
     add_directory("TV Shows", "tv")
     add_directory("Search", "search_menu")
@@ -176,6 +184,10 @@ def router(query_string: str) -> None:
         tv_detail(int(params["tmdb_id"]))
     elif action == "season":
         season(int(params["tmdb_id"]), int(params["season"]))
+    elif action == "auth_torbox":
+        auth.run_device_auth()
+        xbmc.executebuiltin("Container.Refresh")
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     elif action == "continue":
         placeholder("Continue Watching")
     elif action == "noop":

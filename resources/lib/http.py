@@ -24,11 +24,23 @@ class HttpError(Exception):
     """Raised when a request fails or returns a non-2xx status."""
 
 
+# Some hosts (TorBox behind Cloudflare) 403 the default "Python-urllib" UA, so
+# every request carries an explicit User-Agent.
+USER_AGENT = "Torus/0.1 (Kodi)"
+
+
+def default_headers(extra: dict | None = None) -> dict:
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    if extra:
+        headers.update(extra)
+    return headers
+
+
 def get_json(url: str, params: dict | None = None,
              headers: dict | None = None, timeout: int = 20) -> dict:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
-    request = urllib.request.Request(url, headers=headers or {})
+    request = urllib.request.Request(url, headers=default_headers(headers))
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))

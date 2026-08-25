@@ -42,16 +42,27 @@
 
         <category id="advanced" label="Advanced">
             <group id="1">
+                <setting id="image_proxy" type="boolean" label="Route posters via proxy (fixes ISP-blocked images)">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
+                </setting>
                 <setting id="tmdb_api_key" type="string" label="TMDB API key (optional override)">
                     <level>0</level>
-                    <default/>
+                    <default></default>
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
                     <control type="edit" format="string">
                         <heading>TMDB API key (optional override)</heading>
                     </control>
                 </setting>
                 <setting id="torbox_api_key" type="string" label="TorBox API key (optional manual override)">
                     <level>0</level>
-                    <default/>
+                    <default></default>
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
                     <control type="edit" format="string">
                         <heading>TorBox API key (optional manual override)</heading>
                     </control>

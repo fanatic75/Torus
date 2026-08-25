@@ -37,7 +37,7 @@ def _dev_config() -> dict:
     return _DEV_CACHE
 
 
-def _profile_dir() -> str:
+def profile_dir() -> str:
     """Writable per-user addon directory (Kodi profile, or a local dir in dev)."""
     if xbmcvfs is not None:
         path = xbmcvfs.translatePath("special://profile/addon_data/plugin.video.torus/")
@@ -45,6 +45,10 @@ def _profile_dir() -> str:
         path = os.path.join(_REPO_ROOT, ".devprofile")
     os.makedirs(path, exist_ok=True)
     return path
+
+
+# Back-compat alias.
+_profile_dir = profile_dir
 
 
 def get(key: str, default: str = "") -> str:
@@ -97,3 +101,9 @@ def provider() -> str:
 
 def quality_profile() -> str:
     return get("quality_profile", "cinephile")
+
+
+def image_proxy() -> bool:
+    """Route poster/backdrop images through a proxy so ISP-blocked image hosts
+    (e.g. image.tmdb.org behind Jio) still load in Kodi's image loader."""
+    return get("image_proxy", "true").lower() != "false"

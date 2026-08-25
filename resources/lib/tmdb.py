@@ -3,6 +3,8 @@
 Everything the user browses comes from here. The TMDB id is our common handle;
 `external_ids` gives the IMDb id that providers (Comet/Torrentio) need later.
 """
+import urllib.parse
+
 from . import config
 from .http import get_json
 
@@ -58,9 +60,19 @@ def tv_season(tmdb_id: int, season_number: int) -> dict:
 
 
 # --- images ----------------------------------------------------------------
+def _maybe_proxy(url: str) -> str:
+    """Kodi's image loader uses the SYSTEM DNS, which our in-addon DoH can't fix.
+    So when the proxy is enabled, rewrite TMDB image URLs through a proxy host
+    that the ISP doesn't block, keeping posters working behind DNS blocks."""
+    if not url or not config.image_proxy():
+        return url
+    without_scheme = url.split("://", 1)[-1]
+    return "https://images.weserv.nl/?url=" + urllib.parse.quote(without_scheme, safe="")
+
+
 def poster(path: str | None, size: str = "w500") -> str:
-    return f"{IMAGE}/{size}{path}" if path else ""
+    return _maybe_proxy(f"{IMAGE}/{size}{path}") if path else ""
 
 
 def backdrop(path: str | None, size: str = "w1280") -> str:
-    return f"{IMAGE}/{size}{path}" if path else ""
+    return _maybe_proxy(f"{IMAGE}/{size}{path}") if path else ""

@@ -92,6 +92,12 @@ kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1
   </div>
 </div>
 
+<!-- Folder links so Kodi's file browser can navigate this source (hidden from humans). -->
+<div style="display:none">
+  <a href="repository.torus/">repository.torus/</a>
+  <a href="plugin.video.torus/">plugin.video.torus/</a>
+</div>
+
 <div class="card">
   <h2>What it does</h2>
   <div class="feat">
@@ -197,6 +203,19 @@ def write_addons_xml(build_parent: str) -> None:
     print(f"  wrote docs/addons.xml (md5 {md5})")
 
 
+def write_dir_indexes(version: str) -> None:
+    """Directory listing pages so Kodi can browse into each folder (GitHub Pages
+    doesn't auto-index directories)."""
+    for folder, zip_name in ((ADDON, f"{ADDON}-{version}.zip"),
+                             (REPO, f"{REPO}-{REPO_VERSION}.zip")):
+        path = os.path.join(ROOT, PUBLISH_DIR, folder, "index.html")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(f'<!doctype html><html><body>\n'
+                     f'<a href="{zip_name}">{zip_name}</a>\n'
+                     f'</body></html>\n')
+    print("  wrote directory index pages")
+
+
 def write_index_html(version: str) -> None:
     html = (INDEX_TEMPLATE
             .replace("__SOURCE_URL__", DATADIR)
@@ -218,6 +237,7 @@ def main() -> None:
     zip_addon(build_parent, REPO, REPO_VERSION)
     write_addons_xml(build_parent)
     write_index_html(version)
+    write_dir_indexes(version)
     shutil.rmtree(os.path.join(build_parent))
     print("Done. Commit the docs/ folder to publish.")
 

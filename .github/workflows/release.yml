@@ -1,12 +1,11 @@
 name: Release
 
-# When addon.xml's version changes on main, cut a matching git tag + GitHub
-# Release with the packaged addon zip attached. Idempotent: if a Release for the
-# current version already exists, it does nothing.
+# Full auto-release. Bump the version in addon.xml and push to main — that's it.
+# CI regenerates docs/ (addons.xml, md5, the packaged addon zip, landing page),
+# commits it back to main (so Kodi auto-update via GitHub Pages sees the new
+# version), then cuts tag v<version> + a GitHub Release with the zip and notes.
 #
-# Auto-update for installed users does NOT depend on this — that flows from
-# docs/addons.xml (served via GitHub Pages). This just keeps the Releases page
-# and tags in sync with what shipped, automatically.
+# Idempotent: if a Release for the current version already exists, it no-ops.
 
 on:
   push:
@@ -38,14 +37,24 @@ jobs:
             echo "do=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify docs/ was packaged for this version
+      - name: Package docs/ from addon.xml
         if: steps.gate.outputs.do == 'true'
+        run: python3 package.py
+
+      - name: Commit packaged docs/ back to main (if changed)
+        if: steps.gate.outputs.do == 'true'
+        id: commit
         run: |
-          V="${{ steps.ver.outputs.v }}"
-          test -f "docs/plugin.video.torus/plugin.video.torus-$V.zip" \
-            || { echo "::error::docs/plugin.video.torus/plugin.video.torus-$V.zip is missing. Run 'python3 package.py' and commit docs/ before pushing a version bump."; exit 1; }
-          grep -q "id=\"plugin.video.torus\" name=\"Torus\" version=\"$V\"" docs/addons.xml \
-            || { echo "::error::docs/addons.xml does not advertise version $V. Run 'python3 package.py' and commit docs/."; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "docs/ already up to date."
+          else
+            git commit -m "chore: package v${{ steps.ver.outputs.v }} [skip ci]"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Create tag + GitHub Release
         if: steps.gate.outputs.do == 'true'
@@ -56,4 +65,4 @@ jobs:
             --title "Torus v$V" \
             --generate-notes \
             --latest \
-            --target "$GITHUB_SHA"
+            --target "${{ steps.commit.outputs.sha }}"

@@ -36,6 +36,28 @@ def meta(media_type: str, imdb_id: str) -> dict:
     return get_json(f"{BASE}/meta/{media_type}/{imdb_id}.json").get("meta", {})
 
 
+def next_episode(imdb_id: str, season: int, episode: int) -> dict | None:
+    """Given the current (season, episode) of a series, return the next episode
+    as {imdb, season, episode, name, poster}, or None if it's the last one.
+
+    "Next" is the smallest (season, episode) greater than the current pair, so it
+    rolls across season boundaries. Specials (season 0) are ignored.
+    """
+    try:
+        m = meta("series", imdb_id)
+    except Exception:  # noqa: BLE001 - best-effort; caller treats None as "no next"
+        return None
+    current = (int(season or 0), int(episode or 0))
+    episodes = sorted(
+        (v.get("season", 0), v.get("episode", 0)) for v in m.get("videos", [])
+        if v.get("season", 0) and v.get("season", 0) > 0)
+    for s, e in episodes:
+        if (s, e) > current:
+            return {"imdb": imdb_id, "season": s, "episode": e,
+                    "name": m.get("name", ""), "poster": image(m.get("poster"))}
+    return None
+
+
 def image(url: str | None) -> str:
     """Optionally route images through a proxy so ISP-blocked image hosts still
     load in Kodi's image loader (which uses system DNS, not our DoH)."""

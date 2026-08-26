@@ -6,7 +6,6 @@ periodically and on pause/stop persists the play position to SQLite (keyed by
 IMDb id, never the torrent). That's what powers Resume and Continue Watching.
 """
 import json
-from urllib.parse import urlencode
 
 import xbmc
 import xbmcgui
@@ -15,7 +14,6 @@ from resources.lib import cinemeta, config, db
 
 PLAYING_PROP = "torus.playing"
 HOME = 10000  # Kodi Home window; properties here persist for the session.
-PLUGIN = "plugin://plugin.video.torus/"
 
 
 class TorusPlayer(xbmc.Player):
@@ -84,21 +82,8 @@ class TorusPlayer(xbmc.Player):
         """Return the next episode after the current one, or None."""
         if not identity or identity.get("mtype") != "series":
             return None
-        try:
-            meta = cinemeta.meta("series", identity["imdb"])
-        except Exception:  # noqa: BLE001
-            return None
-        current = (identity.get("season", 0), identity.get("episode", 0))
-        episodes = sorted(
-            ((v.get("season", 0), v.get("episode", 0)) for v in meta.get("videos", [])
-             if v.get("season", 0) and v.get("season", 0) > 0))
-        for season, episode in episodes:
-            if (season, episode) > current:
-                return {"imdb": identity["imdb"], "mtype": "series",
-                        "season": season, "episode": episode,
-                        "name": meta.get("name", ""),
-                        "poster": cinemeta.image(meta.get("poster"))}
-        return None
+        return cinemeta.next_episode(identity["imdb"], identity.get("season", 0),
+                                     identity.get("episode", 0))
 
     def _advance(self):
         """Mark the current item finished; queue the next episode if it's a series."""
@@ -110,15 +95,6 @@ class TorusPlayer(xbmc.Player):
             db.set_next_up(nxt["imdb"], "series", nxt["season"], nxt["episode"],
                            nxt["name"], nxt["poster"])
         return nxt
-
-    def _prompt_next(self, nxt):
-        label = "S%02dE%02d" % (nxt["season"], nxt["episode"])
-        message = f"Play {nxt.get('name', '')}  {label}?"
-        if xbmcgui.Dialog().yesno("Up Next", message, yeslabel="Play",
-                                  nolabel="Not now", autoclose=20000):
-            query = urlencode({"action": "play", "imdb": nxt["imdb"], "mtype": "series",
-                               "season": nxt["season"], "episode": nxt["episode"]})
-            xbmc.executebuiltin(f"PlayMedia({PLUGIN}?{query})")
 
     def onPlayBackPaused(self):
         self.save()
@@ -136,13 +112,13 @@ class TorusPlayer(xbmc.Player):
         # failed/instant-ended playback (dead link) must NOT clear the resume point.
         if not (self.advanced or self.last_ratio > 0.9):
             return
+        # Mark finished + queue "next up" in Continue Watching. Starting the next
+        # episode is Kodi's job now: it autoplays the next-episode item main.py
+        # queued into the video playlist, so there's no popup here.
         self.identity = identity  # _advance() reads self.identity
-        nxt = self._next_episode(identity)
         if not self.advanced:
             self._advance()
         self.identity = None
-        if nxt:
-            self._prompt_next(nxt)
 
 
 def main() -> None:

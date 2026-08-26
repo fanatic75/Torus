@@ -58,7 +58,8 @@ def notify(message: str) -> None:
 
 # --- menus -----------------------------------------------------------------
 def home() -> None:
-    if not config.torbox_token():
+    linked = bool(config.torbox_token())
+    if not linked:
         link = xbmcgui.ListItem(label="🔗  Link your TorBox account")
         link.setArt({"icon": "DefaultAddonService.png"})
         xbmcplugin.addDirectoryItem(HANDLE, build_url(action="auth_torbox"), link, isFolder=False)
@@ -67,6 +68,14 @@ def home() -> None:
     add_directory("Search", "search_menu")
     add_directory("Continue Watching", "continue")
     add_directory("My List", "watchlist")
+    if linked:
+        # No liveness check — "linked" is just token presence — so always offer a
+        # relink to recover from an expired/revoked token or to switch accounts.
+        # Same device-code dialog as first-time Link (shows URL + PIN);
+        # run_device_auth() overwrites the stored token, only on success.
+        relink = xbmcgui.ListItem(label="🔗  Relink TorBox account")
+        relink.setArt({"icon": "DefaultAddonService.png"})
+        xbmcplugin.addDirectoryItem(HANDLE, build_url(action="auth_torbox"), relink, isFolder=False)
     finish()
 
 

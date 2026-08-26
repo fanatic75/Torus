@@ -41,8 +41,75 @@ INDEX_TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Torus — Kodi addon</title>
+<title>Torus — TorBox Kodi Addon | native TorBox player for Kodi 21</title>
+<meta name="description" content="Torus is a free, native TorBox Kodi addon: browse movies &amp; TV, play instantly-cached TorBox sources in Kodi, and resume where you left off. No API key — link TorBox with a device code. Kodi 21 / CoreELEC.">
+<meta name="keywords" content="torbox kodi addon, torbox kodi, torbox addon, kodi torbox, torbox for kodi, torbox debrid kodi, kodi debrid addon, torbox stremio kodi, install torbox kodi">
+<meta name="author" content="Prateek Banga">
+<link rel="canonical" href="__SOURCE_URL__">
+
+<!-- Open Graph / Twitter: renders a rich card when the link is shared on Reddit, forums, Discord, X. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Torus">
+<meta property="og:title" content="Torus — the TorBox Kodi addon">
+<meta property="og:description" content="A free, native TorBox addon for Kodi. Browse movies &amp; TV, play instantly-cached TorBox sources, resume where you left off. No API key to type.">
+<meta property="og:url" content="__SOURCE_URL__">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Torus — the TorBox Kodi addon">
+<meta name="twitter:description" content="A free, native TorBox addon for Kodi. Play instantly-cached TorBox sources and resume where you left off. No API key to type.">
+
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#127909;</text></svg>">
+
+<!-- Structured data: helps Google show a rich result and helps LLMs (ChatGPT/Claude/Perplexity) parse what Torus is. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Torus",
+  "alternateName": "TorBox Kodi Addon",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Kodi 21 (Omega), CoreELEC, LibreELEC, Android, Windows, Linux, macOS",
+  "description": "Torus is a native TorBox addon for Kodi. Browse movies and TV with keyless metadata, find instantly-playable TorBox-cached sources via Comet and Torrentio, play in Kodi's native player, and resume where you left off. No API key to type — TorBox is linked with a device code.",
+  "url": "__SOURCE_URL__",
+  "downloadUrl": "__SOURCE_URL____REPO_ZIP__",
+  "softwareVersion": "__VERSION__",
+  "license": "https://opensource.org/licenses/MIT",
+  "author": { "@type": "Person", "name": "Prateek Banga" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is there a TorBox addon for Kodi?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Torus is a free, open-source TorBox Kodi addon. You browse movies and TV inside Kodi, and Torus finds instantly-playable TorBox-cached sources and plays them in Kodi's native player." }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I install TorBox on Kodi?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Enable Unknown sources in Kodi, add __SOURCE_URL__ as a file-manager source named Torus, install the repository zip from it, then install Torus from the Torus Repository. Open Torus and link your TorBox account with the device code." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does the Torus TorBox addon need a TorBox API key?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No API key typing. Torus links your TorBox account with a phone-approved device code, so there is nothing to enter on a TV remote. You do need a paid TorBox account." }
+    },
+    {
+      "@type": "Question",
+      "name": "What Kodi versions does the TorBox addon support?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Torus targets Kodi 21 (Omega) and is developed and tested on CoreELEC. It runs on any Kodi 21 platform." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Torus free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The Torus addon is free and open-source (MIT). It requires a paid TorBox account, which provides the cached sources it plays." }
+    }
+  ]
+}
+</script>
 <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
@@ -62,6 +129,8 @@ ol { padding-left:20px; margin:0; } li { margin:8px 0; }
 .dl:hover { border-color:#8b949e; }
 .feat { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
 .feat div { background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:12px 14px; font-size:.92rem; color:#c9d1d9; }
+.faq h3 { font-size:1rem; margin:16px 0 4px; color:#e6edf3; }
+.faq p { margin:0 0 4px; color:#c9d1d9; font-size:.95rem; }
 footer { text-align:center; color:#6e7681; font-size:.85rem; margin-top:34px; }
 a { color:#7c9cff; }
 kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1px 6px; font-size:.85em; }
@@ -71,7 +140,7 @@ kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1
 <div class="wrap">
 <header>
   <h1>Torus</h1>
-  <p class="tag">A TorBox-native media browser for Kodi — Stremio-like, keyless, with local resume.</p>
+  <p class="tag">The <b>TorBox Kodi addon</b> — a native TorBox media browser for Kodi. Stremio-like, keyless, with local resume.</p>
 </header>
 
 <div class="card">
@@ -83,7 +152,7 @@ kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1
 </div>
 
 <div class="card">
-  <h2>Install (auto-updates)</h2>
+  <h2>Install the TorBox addon on Kodi (auto-updates)</h2>
   <ol>
     <li>Enable <kbd>Settings &#8594; System &#8594; Add-ons &#8594; Unknown sources</kbd>.</li>
     <li><kbd>Settings &#8594; File manager &#8594; Add source</kbd> &#8594; paste the URL above &#8594; name it <b>Torus</b>.</li>
@@ -104,7 +173,7 @@ kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1
 </div>
 
 <div class="card">
-  <h2>What it does</h2>
+  <h2>What the TorBox Kodi addon does</h2>
   <div class="feat">
     <div>Keyless discovery (Cinemeta)</div>
     <div>TorBox device login &mdash; no typing</div>
@@ -117,8 +186,27 @@ kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1
   </div>
 </div>
 
+<div class="card faq">
+  <h2>TorBox on Kodi — FAQ</h2>
+
+  <h3>Is there a TorBox addon for Kodi?</h3>
+  <p>Yes. <b>Torus</b> is a free, open-source TorBox Kodi addon. You browse movies and TV inside Kodi, and Torus finds instantly-playable TorBox-cached sources and plays them in Kodi's native player.</p>
+
+  <h3>How do I install TorBox on Kodi?</h3>
+  <p>Add <code>__SOURCE_URL__</code> as a file-manager source, install the repository zip, then install Torus from the Torus Repository (steps above). Link your TorBox account with the device code and you're done.</p>
+
+  <h3>Does it need a TorBox API key?</h3>
+  <p>No key typing. Torus links your TorBox account with a phone-approved device code — nothing to enter on a TV remote. You do need a <b>paid TorBox account</b>.</p>
+
+  <h3>What Kodi versions are supported?</h3>
+  <p>Kodi <b>21 (Omega)</b>, developed and tested on CoreELEC. It runs on any Kodi 21 platform.</p>
+
+  <h3>Is Torus free?</h3>
+  <p>Yes — the addon is free and open-source (MIT). It relies on your paid TorBox account for the cached sources it plays.</p>
+</div>
+
 <footer>
-  Torus v__VERSION__ &middot; <a href="__GH__">source on GitHub</a><br>
+  Torus v__VERSION__ &middot; the TorBox Kodi addon &middot; <a href="__GH__">source on GitHub</a><br>
   Requires a TorBox account. Hosts no content, ships no indexers.
 </footer>
 </div>
@@ -184,6 +272,12 @@ def zip_addon(build_parent: str, addon_id: str, version: str) -> None:
                 fp = os.path.join(b, f)
                 arc = os.path.join(addon_id, os.path.relpath(fp, base))
                 zf.write(fp, arc)
+    # Keep only the current version's zip — a repo just needs the version that's
+    # in addons.xml; stale zips are dead weight (that's how 0.7.0–0.7.3 piled up).
+    keep = os.path.basename(out_zip)
+    for f in os.listdir(out_dir):
+        if f.endswith(".zip") and f != keep:
+            os.remove(os.path.join(out_dir, f))
     print(f"  wrote {os.path.relpath(out_zip, ROOT)}")
 
 

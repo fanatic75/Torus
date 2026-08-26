@@ -257,6 +257,52 @@ def _resolve_best(imdb, mtype, season_number, episode_number) -> str | None:
     return streams[0].url if streams else None
 
 
+def _episode_pointer_item(nxt) -> tuple[str, xbmcgui.ListItem]:
+    """A playable *plugin-URL* ListItem for a queued next episode.
+
+    It points back at action=play, so the next episode's TorBox link is resolved
+    only when Kodi actually advances to this item — nothing is pre-fetched.
+    """
+    url = build_url(action="play", imdb=nxt["imdb"], mtype="series",
+                    season=nxt["season"], episode=nxt["episode"])
+    label = "S%02dE%02d" % (nxt["season"], nxt["episode"])
+    if nxt.get("name"):
+        label += f"  {nxt['name']}"
+    li = xbmcgui.ListItem(label=label)
+    li.setProperty("IsPlayable", "true")
+    if nxt.get("poster"):
+        li.setArt({"poster": nxt["poster"], "thumb": nxt["poster"]})
+    li.getVideoInfoTag().setMediaType("episode")
+    return url, li
+
+
+def _queue_next_episode(imdb, season_number, episode_number) -> None:
+    """Queue ONE lazy next-episode pointer after the current stream so Kodi's
+    native next-track control and autoplay-next work — without pre-queuing the
+    season or pre-fetching any link.
+
+    Called after the current episode has been resolved. play() re-runs when Kodi
+    advances to the pointer, which resolves that episode and queues the one after
+    it — an endless 1-ahead chain that only ever holds pointers, never streams.
+    """
+    nxt = cinemeta.next_episode(imdb, season_number, episode_number)
+    if not nxt:
+        return  # last episode — leave the ⏭ control inert, correctly
+    pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+    pos = pl.getposition()  # NB: lowercase — PlayList.getposition(), not getPosition()
+    # Drop anything still queued after the current item — a stale pointer from a
+    # previous show, or this play()'s own earlier run — so exactly one follows.
+    if pos >= 0:
+        for i in range(len(pl) - 1, pos, -1):
+            try:
+                pl.remove(pl[i].getPath())
+            except Exception:  # noqa: BLE001 - best-effort cleanup
+                pass
+    url, li = _episode_pointer_item(nxt)
+    if not any(pl[i].getPath() == url for i in range(len(pl))):
+        pl.add(url, li)
+
+
 def watchlist() -> None:
     rows = db.list_watchlist()
     if not rows:
@@ -329,6 +375,11 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) ->
             "url": url,
         }))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
+
+    # Series only: hand Kodi a next-episode to move to, so ⏭ / autoplay-next work.
+    # Done after setResolvedUrl so it never delays the current episode starting.
+    if mtype == "series" and imdb:
+        _queue_next_episode(imdb, season_number, episode_number)
 
 
 def placeholder(title: str) -> None:

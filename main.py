@@ -255,15 +255,68 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
         tag.setMediaType("movie" if mtype == "movie" else "episode")
         tag.setTitle(stream.title)
         add_item(item, False, action="play", url=stream.url, imdb=imdb, mtype=mtype,
-                 season=season_number or 0, episode=episode_number or 0)
+                 season=season_number or 0, episode=episode_number or 0,
+                 title=stream.title, quality=stream.quality, size=stream.size,
+                 seeders=str(stream.seeders) if stream.seeders else "")
     finish()
 
 
-def _resolve_best(imdb, mtype, season_number, episode_number) -> str | None:
+def _resolve_best(imdb, mtype, season_number, episode_number):
+    """Return the top-ranked Stream (not just its URL) so the caller can show
+    which release is playing. None if nothing cached."""
     provider = providers.get_provider()
     streams = ranking.rank(provider.search(imdb, mtype,
                                             season_number or None, episode_number or None))
-    return streams[0].url if streams else None
+    return streams[0] if streams else None
+
+
+def _played_base_item(meta, mtype, season_number, episode_number, url):
+    """A rich ListItem for the resolved stream, carrying Cinemeta identity
+    (title / plot / year / rating / genres / art), reusing the same builders as
+    the browse pages. Falls back to a bare item when meta is unavailable."""
+    if meta and mtype == "movie":
+        item = listing.catalog_item(meta)
+        item.getVideoInfoTag().setMediaType("movie")
+    elif meta and mtype == "series":
+        video = next((v for v in meta.get("videos", [])
+                      if v.get("season") == season_number and v.get("episode") == episode_number), {})
+        item = listing.episode_item(meta, video) if video else xbmcgui.ListItem()
+    else:
+        item = xbmcgui.ListItem()
+    item.setPath(url)
+    return item
+
+
+def _apply_source_info(item, mtype, title="", quality="", size="", seeders="") -> None:
+    """Append the source/release block (quality, size, TRaSH group tier, seeders,
+    filename) to the item's plot, so Kodi's OSD "Information" shows WHICH release
+    is playing alongside the Cinemeta synopsis. Cinemeta title/art are left intact."""
+    tag = item.getVideoInfoTag()
+    tag.setMediaType("movie" if mtype == "movie" else "episode")
+    tier = release_groups.tier_label(title) if title else ""
+    try:
+        s = int(seeders)
+    except (TypeError, ValueError):
+        s = 0
+    lines = []
+    if quality:
+        lines.append(f"Quality: {quality}")
+    if size:
+        lines.append(f"Size: {size}")
+    if tier:
+        lines.append(f"Group: {tier}")
+    if s:
+        lines.append(f"Seeders: {s}")
+    if title:
+        lines.append(title)
+    if not lines:
+        return
+    block = "── Source ──\n" + "\n".join(lines)
+    try:
+        base = tag.getPlot()
+    except Exception:  # noqa: BLE001 - older API without a getter
+        base = ""
+    tag.setPlot(f"{base}\n\n{block}" if base else block)
 
 
 def _episode_pointer_item(nxt) -> tuple[str, xbmcgui.ListItem]:
@@ -347,7 +400,8 @@ def wl_remove(imdb) -> None:
     _after_watchlist_change()
 
 
-def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) -> None:
+def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
+         title="", quality="", size="", seeders="") -> None:
     progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
 
     if not url:  # one-click Play / Continue Watching
@@ -358,13 +412,31 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None) ->
             notify("Link your TorBox account first")
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
             return
-        url = _resolve_best(imdb, mtype, season_number, episode_number)
-        if not url:
+        stream = _resolve_best(imdb, mtype, season_number, episode_number)
+        if not stream:
             notify("No cached sources found")
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
             return
+        url = stream.url
+        # Carry the auto-picked release's details into the info panel.
+        title = title or stream.title
+        quality = quality or stream.quality
+        size = size or stream.size
+        seeders = seeders or (str(stream.seeders) if stream.seeders else "")
 
-    item = xbmcgui.ListItem(path=url)
+    # Cinemeta identity (best-effort, never blocks playback) + the source block
+    # = a full info panel: recognisable title/plot/art plus which release is playing.
+    meta = {}
+    if imdb:
+        try:
+            meta = cinemeta.meta(mtype, imdb)
+        except Exception:  # noqa: BLE001 - info is best-effort
+            meta = {}
+    item = _played_base_item(meta, mtype, season_number, episode_number, url)
+    if not meta and title:  # no Cinemeta identity — at least name the release
+        item.getVideoInfoTag().setTitle(title)
+    _apply_source_info(item, mtype, title, quality, size, seeders)
+
     if progress and progress.get("duration"):
         ratio = progress["position"] / progress["duration"]
         if 0.01 < ratio < 0.95:
@@ -432,6 +504,10 @@ def router(query_string: str) -> None:
             int(params["season"]) if params.get("season") else 0,
             int(params["episode"]) if params.get("episode") else 0,
             params.get("url"),
+            params.get("title", ""),
+            params.get("quality", ""),
+            params.get("size", ""),
+            params.get("seeders", ""),
         )
     elif action == "auth_torbox":
         auth.run_device_auth()

@@ -1,6 +1,10 @@
-# Torus
+# Torus — the TorBox Kodi addon
 
-A **TorBox-native media browser for Kodi** with a Stremio-like feel and local-first resume.
+A **TorBox-native media browser for Kodi** (the **TorBox addon for Kodi**) with a Stremio-like feel
+and local-first resume.
+
+> **Install:** add `https://fanatic75.github.io/Torus/` in Kodi → File manager → Add source. Full
+> steps and a one-page guide: **https://fanatic75.github.io/Torus/**
 
 Browse movies and TV, find instantly-playable **TorBox-cached** sources, play them in Kodi's
 native player, and **resume where you left off** — all stored locally. No accounts to create, no

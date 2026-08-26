@@ -1,0 +1,59 @@
+name: Release
+
+# When addon.xml's version changes on main, cut a matching git tag + GitHub
+# Release with the packaged addon zip attached. Idempotent: if a Release for the
+# current version already exists, it does nothing.
+#
+# Auto-update for installed users does NOT depend on this — that flows from
+# docs/addons.xml (served via GitHub Pages). This just keeps the Releases page
+# and tags in sync with what shipped, automatically.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read addon version
+        id: ver
+        run: echo "v=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse('addon.xml').getroot().get('version'))")" >> "$GITHUB_OUTPUT"
+
+      - name: Does a Release for this version already exist?
+        id: gate
+        run: |
+          if gh release view "v${{ steps.ver.outputs.v }}" >/dev/null 2>&1; then
+            echo "do=false" >> "$GITHUB_OUTPUT"
+            echo "Release v${{ steps.ver.outputs.v }} already exists — nothing to do."
+          else
+            echo "do=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify docs/ was packaged for this version
+        if: steps.gate.outputs.do == 'true'
+        run: |
+          V="${{ steps.ver.outputs.v }}"
+          test -f "docs/plugin.video.torus/plugin.video.torus-$V.zip" \
+            || { echo "::error::docs/plugin.video.torus/plugin.video.torus-$V.zip is missing. Run 'python3 package.py' and commit docs/ before pushing a version bump."; exit 1; }
+          grep -q "id=\"plugin.video.torus\" name=\"Torus\" version=\"$V\"" docs/addons.xml \
+            || { echo "::error::docs/addons.xml does not advertise version $V. Run 'python3 package.py' and commit docs/."; exit 1; }
+
+      - name: Create tag + GitHub Release
+        if: steps.gate.outputs.do == 'true'
+        run: |
+          V="${{ steps.ver.outputs.v }}"
+          gh release create "v$V" \
+            "docs/plugin.video.torus/plugin.video.torus-$V.zip#plugin.video.torus-$V.zip (Kodi addon)" \
+            --title "Torus v$V" \
+            --generate-notes \
+            --latest \
+            --target "$GITHUB_SHA"

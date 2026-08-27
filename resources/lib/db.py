@@ -47,6 +47,19 @@ def _connect() -> sqlite3.Connection:
             added_at INTEGER
         )
     """)
+    # Custom folders for My List. A watchlist row's folder_id is NULL = root
+    # (top level); an integer references folders.id. Movies and shows both allowed.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS folders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+    """)
+    try:  # migrate older DBs that predate folders
+        conn.execute("ALTER TABLE watchlist ADD COLUMN folder_id INTEGER")
+    except sqlite3.OperationalError:
+        pass
     return conn
 
 
@@ -120,13 +133,104 @@ def clear_progress(imdb, season=0, episode=0) -> None:
 
 
 # --- watchlist -------------------------------------------------------------
-def add_watchlist(imdb, mtype, name="", poster="") -> None:
+def add_watchlist(imdb, mtype, name="", poster="", folder_id=None) -> None:
     conn = _connect()
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO watchlist (imdb, mtype, name, poster, added_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (imdb, mtype, name, poster, int(time.time())))
+            "INSERT OR REPLACE INTO watchlist (imdb, mtype, name, poster, folder_id, added_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (imdb, mtype, name, poster, folder_id, int(time.time())))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# --- watchlist folders -----------------------------------------------------
+def _folder_id_by_name(conn, name):
+    row = conn.execute("SELECT id FROM folders WHERE name=? COLLATE NOCASE",
+                       (name,)).fetchone()
+    return row[0] if row else None
+
+
+def create_folder(name) -> int | None:
+    """Create a folder and return its id, or return the id of an existing folder
+    with the same name (case-insensitive) so names don't duplicate. Returns None
+    if the name is blank after trimming."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    conn = _connect()
+    try:
+        existing = _folder_id_by_name(conn, name)
+        if existing is not None:
+            return existing
+        cur = conn.execute("INSERT INTO folders (name, created_at) VALUES (?, ?)",
+                           (name, int(time.time())))
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def rename_folder(folder_id, name) -> bool:
+    """Rename a folder. Returns False if the name is blank or already used by a
+    different folder (case-insensitive)."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    conn = _connect()
+    try:
+        other = _folder_id_by_name(conn, name)
+        if other is not None and other != folder_id:
+            return False
+        conn.execute("UPDATE folders SET name=? WHERE id=?", (name, folder_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def list_folders() -> list[dict]:
+    """All custom folders with their item counts, alphabetical."""
+    conn = _connect()
+    try:
+        rows = conn.execute("""
+            SELECT f.id, f.name, COUNT(w.imdb) AS count
+            FROM folders f
+            LEFT JOIN watchlist w ON w.folder_id = f.id
+            GROUP BY f.id, f.name
+            ORDER BY f.name COLLATE NOCASE
+        """).fetchall()
+    finally:
+        conn.close()
+    return [dict(zip(("id", "name", "count"), r)) for r in rows]
+
+
+def get_folder(folder_id) -> dict | None:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT id, name FROM folders WHERE id=?", (folder_id,)).fetchone()
+    finally:
+        conn.close()
+    return {"id": row[0], "name": row[1]} if row else None
+
+
+def delete_folder(folder_id) -> None:
+    """Delete a folder AND every title inside it (destructive, per design)."""
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM watchlist WHERE folder_id=?", (folder_id,))
+        conn.execute("DELETE FROM folders WHERE id=?", (folder_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def move_to_folder(imdb, folder_id) -> None:
+    """Move a watchlist title to a folder (folder_id None = back to root)."""
+    conn = _connect()
+    try:
+        conn.execute("UPDATE watchlist SET folder_id=? WHERE imdb=?", (folder_id, imdb))
         conn.commit()
     finally:
         conn.close()
@@ -157,12 +261,20 @@ def watchlist_ids() -> set:
         conn.close()
 
 
-def list_watchlist(limit=300) -> list[dict]:
+def list_watchlist(folder_id=None, limit=300) -> list[dict]:
+    """Titles in a folder. folder_id None = root (top-level, un-foldered) items."""
     conn = _connect()
     try:
-        rows = conn.execute(
-            "SELECT imdb, mtype, name, poster FROM watchlist ORDER BY added_at DESC LIMIT ?",
-            (limit,)).fetchall()
+        if folder_id is None:
+            rows = conn.execute(
+                "SELECT imdb, mtype, name, poster FROM watchlist "
+                "WHERE folder_id IS NULL ORDER BY added_at DESC LIMIT ?",
+                (limit,)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT imdb, mtype, name, poster FROM watchlist "
+                "WHERE folder_id=? ORDER BY added_at DESC LIMIT ?",
+                (folder_id, limit)).fetchall()
     finally:
         conn.close()
     return [dict(zip(("imdb", "mtype", "name", "poster"), r)) for r in rows]

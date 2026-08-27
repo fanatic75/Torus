@@ -129,10 +129,12 @@ def _choose_source_ctx(imdb, mtype, season_number=0, episode_number=0):
 
 
 def _watchlist_ctx(imdb, mtype, name, poster, in_list):
-    """Context-menu entry to add/remove a title from My List."""
+    """Context-menu entries to add/move/remove a title in My List."""
     if in_list:
-        return [("Remove from My List",
-                 f"RunPlugin({build_url(action='wl_remove', imdb=imdb)})")]
+        return [
+            ("Move to folder…", f"RunPlugin({build_url(action='wl_move', imdb=imdb)})"),
+            ("Remove from My List", f"RunPlugin({build_url(action='wl_remove', imdb=imdb)})"),
+        ]
     return [("Add to My List",
              f"RunPlugin({build_url(action='wl_add', imdb=imdb, mtype=mtype, name=name, poster=poster)})")]
 
@@ -365,32 +367,137 @@ def _queue_next_episode(imdb, season_number, episode_number) -> None:
         pl.add(url, li)
 
 
+def _add_watchlist_row(row) -> None:
+    """Render one My List title (movie or show) as a browsable item."""
+    meta_like = {"id": row["imdb"], "name": row["name"],
+                 "type": row["mtype"], "poster": row["poster"]}
+    item = listing.catalog_item(meta_like)
+    item.addContextMenuItems(
+        _watchlist_ctx(row["imdb"], row["mtype"], row["name"], row["poster"], True))
+    add_item(item, True, action="detail", imdb=row["imdb"], mtype=row["mtype"])
+
+
 def watchlist() -> None:
-    rows = db.list_watchlist()
-    if not rows:
+    """My List root: a New-folder action, the custom folders, then un-foldered titles."""
+    folders = db.list_folders()
+    rows = db.list_watchlist()  # root (folder_id IS NULL)
+
+    nf = xbmcgui.ListItem(label="＋  New folder")
+    nf.setArt({"icon": "DefaultAddSource.png"})
+    add_item(nf, False, action="wl_newfolder")
+
+    if not folders and not rows:
         item = xbmcgui.ListItem(label="Your list is empty — add titles from any movie or show")
         add_item(item, False, action="noop")
         finish()
         return
+
+    for f in folders:
+        item = xbmcgui.ListItem(label=f"📁  {f['name']}  ({f['count']})")
+        item.setArt({"icon": "DefaultFolder.png"})
+        item.addContextMenuItems([
+            ("Rename folder", f"RunPlugin({build_url(action='wl_renamefolder', folder=f['id'])})"),
+            ("Delete folder", f"RunPlugin({build_url(action='wl_delfolder', folder=f['id'])})")])
+        add_item(item, True, action="wl_folder", folder=f["id"])
+
     for row in rows:
-        meta_like = {"id": row["imdb"], "name": row["name"],
-                     "type": row["mtype"], "poster": row["poster"]}
-        item = listing.catalog_item(meta_like)
-        item.addContextMenuItems(
-            _watchlist_ctx(row["imdb"], row["mtype"], row["name"], row["poster"], True))
-        add_item(item, True, action="detail", imdb=row["imdb"], mtype=row["mtype"])
+        _add_watchlist_row(row)
+    finish("movies")
+
+
+def wl_folder(folder_id: int) -> None:
+    """Contents of one custom folder."""
+    rows = db.list_watchlist(folder_id)
+    if not rows:
+        item = xbmcgui.ListItem(label="Empty folder — add titles here, or move them in")
+        add_item(item, False, action="noop")
+        finish()
+        return
+    for row in rows:
+        _add_watchlist_row(row)
     finish("movies")
 
 
 def _after_watchlist_change() -> None:
-    if HANDLE >= 0:  # a clicked toggle item; RunPlugin context-menu passes handle -1
+    if HANDLE >= 0:  # a clicked item; RunPlugin context-menu passes handle -1
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     xbmc.executebuiltin("Container.Refresh")
 
 
+def _pick_folder(heading: str):
+    """Folder picker. Returns (chosen, folder_id): chosen=False if cancelled;
+    folder_id None = root. Offers (No folder), New folder…, then existing folders."""
+    folders = db.list_folders()
+    options = ["(No folder)", "＋  New folder…"]
+    ids = [None, "__new__"]
+    for f in folders:
+        options.append(f"{f['name']}  ({f['count']})")
+        ids.append(f["id"])
+    idx = xbmcgui.Dialog().select(heading, options)
+    if idx < 0:
+        return False, None
+    choice = ids[idx]
+    if choice == "__new__":
+        name = xbmcgui.Dialog().input("New folder name", type=xbmcgui.INPUT_ALPHANUM)
+        fid = db.create_folder(name)  # None if blank; reuses a same-name folder
+        if fid is None:
+            return False, None
+        return True, fid
+    return True, choice
+
+
 def wl_add(imdb, mtype="movie", name="", poster="") -> None:
-    db.add_watchlist(imdb, mtype, name, poster)
+    chosen, folder_id = _pick_folder("Add to folder")
+    if not chosen:
+        _after_watchlist_change()
+        return
+    db.add_watchlist(imdb, mtype, name, poster, folder_id)
     xbmcgui.Dialog().notification("Torus", "Added to My List", xbmcgui.NOTIFICATION_INFO)
+    _after_watchlist_change()
+
+
+def wl_move(imdb) -> None:
+    chosen, folder_id = _pick_folder("Move to folder")
+    if not chosen:
+        _after_watchlist_change()
+        return
+    db.move_to_folder(imdb, folder_id)
+    xbmcgui.Dialog().notification("Torus", "Moved", xbmcgui.NOTIFICATION_INFO)
+    _after_watchlist_change()
+
+
+def wl_newfolder() -> None:
+    name = xbmcgui.Dialog().input("New folder name", type=xbmcgui.INPUT_ALPHANUM)
+    db.create_folder(name)  # no-ops on blank; reuses a same-name folder
+    _after_watchlist_change()
+
+
+def wl_renamefolder(folder_id: int) -> None:
+    folder = db.get_folder(folder_id)
+    if not folder:
+        _after_watchlist_change()
+        return
+    name = xbmcgui.Dialog().input("Rename folder", folder["name"], type=xbmcgui.INPUT_ALPHANUM)
+    if name and name.strip() != folder["name"]:
+        if db.rename_folder(folder_id, name):
+            xbmcgui.Dialog().notification("Torus", "Folder renamed", xbmcgui.NOTIFICATION_INFO)
+        else:
+            xbmcgui.Dialog().notification("Torus", "A folder with that name already exists",
+                                          xbmcgui.NOTIFICATION_WARNING)
+    _after_watchlist_change()
+
+
+def wl_delfolder(folder_id: int) -> None:
+    folder = db.get_folder(folder_id)
+    if not folder:
+        _after_watchlist_change()
+        return
+    n = len(db.list_watchlist(folder_id))
+    msg = (f"Delete “{folder['name']}” and its {n} title(s)?" if n
+           else f"Delete “{folder['name']}”?")
+    if xbmcgui.Dialog().yesno("Delete folder", msg, yeslabel="Delete", nolabel="Cancel"):
+        db.delete_folder(folder_id)
+        xbmcgui.Dialog().notification("Torus", "Folder deleted", xbmcgui.NOTIFICATION_INFO)
     _after_watchlist_change()
 
 
@@ -517,9 +624,19 @@ def router(query_string: str) -> None:
         continue_watching()
     elif action == "watchlist":
         watchlist()
+    elif action == "wl_folder":
+        wl_folder(int(params["folder"]))
     elif action == "wl_add":
         wl_add(params.get("imdb", ""), params.get("mtype", "movie"),
                params.get("name", ""), params.get("poster", ""))
+    elif action == "wl_move":
+        wl_move(params.get("imdb", ""))
+    elif action == "wl_newfolder":
+        wl_newfolder()
+    elif action == "wl_renamefolder":
+        wl_renamefolder(int(params["folder"]))
+    elif action == "wl_delfolder":
+        wl_delfolder(int(params["folder"]))
     elif action == "wl_remove":
         wl_remove(params.get("imdb", ""))
     elif action == "noop":

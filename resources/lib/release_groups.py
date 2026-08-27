@@ -66,7 +66,7 @@ def category(text: str) -> str | None:
 def extract_group(title: str) -> str:
     """The release group is the token after the final '-' (scene/p2p convention)."""
     text = re.sub(r"\[[^\]]*\]\s*$", "", title.strip())          # strip trailing [TGx]
-    text = re.sub(r"\.(mkv|mp4|avi|ts|m2ts|iso)$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\.(mkv|mp4|avi|ts|m2ts|iso)$", "", text, flags=re.IGNORECASE).strip()
     match = re.search(r"-([A-Za-z0-9]{2,25})$", text)
     return match.group(1) if match else ""
 

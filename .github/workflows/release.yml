@@ -37,6 +37,10 @@ jobs:
             echo "do=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Run tests (gate the release)
+        if: steps.gate.outputs.do == 'true'
+        run: python3 -m pip install --upgrade pip pytest && python3 -m pytest
+
       - name: Package docs/ from addon.xml
         if: steps.gate.outputs.do == 'true'
         run: python3 package.py

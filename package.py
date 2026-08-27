@@ -32,9 +32,9 @@ DATADIR = f"https://raw.githubusercontent.com/{GH_USER}/Torus/main/{PUBLISH_DIR}
 
 # Dev-only paths that must never ship inside the addon zip.
 EXCLUDE_DIRS = {".git", "repo", "docs", "build", "__pycache__", ".devprofile",
-                ".claude", ".github"}
+                ".claude", ".github", "tests", ".pytest_cache"}
 EXCLUDE_FILES = {"deploy.sh", "package.py", "dev.config.json",
-                 "dev.config.example.json", ".DS_Store"}
+                 "dev.config.example.json", ".DS_Store", "pytest.ini"}
 
 INDEX_TEMPLATE = """<!doctype html>
 <html lang="en">

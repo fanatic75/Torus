@@ -242,8 +242,14 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
         finish()
         return
 
+    expected = ""
+    try:
+        expected = cinemeta.meta(mtype, imdb).get("name", "")
+    except Exception:  # noqa: BLE001 - matching is best-effort; keep listing all sources
+        expected = ""
     provider = providers.get_provider()
-    streams = ranking.rank(provider.search(imdb, mtype, season_number, episode_number))
+    streams = ranking.rank(provider.search(imdb, mtype, season_number, episode_number),
+                           expected=expected, series=(mtype == "series"))
     if not streams:
         notify("No cached sources found")
 
@@ -263,12 +269,15 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
     finish()
 
 
-def _resolve_best(imdb, mtype, season_number, episode_number):
+def _resolve_best(imdb, mtype, season_number, episode_number, expected=""):
     """Return the top-ranked Stream (not just its URL) so the caller can show
-    which release is playing. None if nothing cached."""
+    which release is playing. None if nothing cached. `expected` (the show/movie
+    title) makes ranking reject wrong-show releases from the auto-pick — so
+    one-click Play and next-episode never grab a mismatched result."""
     provider = providers.get_provider()
-    streams = ranking.rank(provider.search(imdb, mtype,
-                                            season_number or None, episode_number or None))
+    streams = ranking.rank(
+        provider.search(imdb, mtype, season_number or None, episode_number or None),
+        expected=expected, series=(mtype == "series"))
     return streams[0] if streams else None
 
 
@@ -511,6 +520,16 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
          title="", quality="", size="", seeders="") -> None:
     progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
 
+    # Cinemeta identity (best-effort, never blocks playback): feeds both the info
+    # panel AND the expected title, so auto-pick ranks the correct show first.
+    meta = {}
+    if imdb:
+        try:
+            meta = cinemeta.meta(mtype, imdb)
+        except Exception:  # noqa: BLE001 - info is best-effort
+            meta = {}
+    expected = meta.get("name", "")
+
     if not url:  # one-click Play / Continue Watching
         # Always resolve a FRESH source. TorBox stream links are IP-locked and
         # time-limited, so reusing a stored URL breaks after an IP change or a
@@ -519,7 +538,7 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
             notify("Link your TorBox account first")
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
             return
-        stream = _resolve_best(imdb, mtype, season_number, episode_number)
+        stream = _resolve_best(imdb, mtype, season_number, episode_number, expected)
         if not stream:
             notify("No cached sources found")
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
@@ -531,14 +550,6 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
         size = size or stream.size
         seeders = seeders or (str(stream.seeders) if stream.seeders else "")
 
-    # Cinemeta identity (best-effort, never blocks playback) + the source block
-    # = a full info panel: recognisable title/plot/art plus which release is playing.
-    meta = {}
-    if imdb:
-        try:
-            meta = cinemeta.meta(mtype, imdb)
-        except Exception:  # noqa: BLE001 - info is best-effort
-            meta = {}
     item = _played_base_item(meta, mtype, season_number, episode_number, url)
     if not meta and title:  # no Cinemeta identity — at least name the release
         item.getVideoInfoTag().setTitle(title)

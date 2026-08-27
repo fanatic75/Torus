@@ -10,7 +10,7 @@ Junk (CAM/TS) is pushed to the bottom. M4 will layer configurable profiles on to
 from __future__ import annotations
 import re
 
-from . import release_groups
+from . import matching, release_groups
 from .providers.base import Stream
 
 _DV = re.compile(r"(?<![a-z])dv(?![a-z])")
@@ -67,5 +67,17 @@ def score(stream: Stream) -> int:
     return points
 
 
-def rank(streams: list[Stream]) -> list[Stream]:
-    return sorted(streams, key=score, reverse=True)
+def rank(streams: list[Stream], expected: str = "", series: bool = False) -> list[Stream]:
+    """Rank best-first. When `expected` (the show/movie title) is given, whether a
+    release actually belongs to that title is the DOMINANT factor — a correct-show
+    source always outranks a wrong-show one regardless of quality — so one-click
+    Play and next-episode auto-pick can't grab a mismatched release. Fail-open: if
+    nothing matches, ordering falls back to pure quality score.
+    """
+    if not expected:
+        return sorted(streams, key=score, reverse=True)
+    return sorted(
+        streams,
+        key=lambda s: (matching.matches(s.title or s.raw_name, expected, series), score(s)),
+        reverse=True,
+    )

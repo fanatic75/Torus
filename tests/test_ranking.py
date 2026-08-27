@@ -36,3 +36,26 @@ def test_rank_orders_best_first():
     ranked = rank(streams)
     assert ranked[0].title.startswith("Movie 2160p")
     assert ranked[-1].title.startswith("Movie 720p")
+
+
+# --- match-aware ranking (Dark bug) ---------------------------------------
+def test_match_beats_quality():
+    # a correct-show 720p must outrank a wrong-show 2160p
+    correct = Stream(title="DARK.S01E01.720p-NTb", url="c", raw_name="DARK.S01E01.720p-NTb")
+    wrong = Stream(title="Dark.Matter.S01E01.2160p-G66", url="w", raw_name="Dark.Matter.S01E01.2160p-G66")
+    ranked = rank([wrong, correct], expected="Dark", series=True)
+    assert ranked[0].url == "c"
+
+
+def test_match_keeps_all_sources():
+    streams = [Stream(title="His.Dark.Materials.S01E01.2160p", url="a", raw_name="His.Dark.Materials.S01E01.2160p"),
+               Stream(title="DARK.S01E01.1080p-NTb", url="b", raw_name="DARK.S01E01.1080p-NTb")]
+    ranked = rank(streams, expected="Dark", series=True)
+    assert {s.url for s in ranked} == {"a", "b"}   # nothing dropped
+    assert ranked[0].url == "b"                     # correct show on top
+
+
+def test_no_expected_is_quality_only():
+    a = Stream(title="X 2160p", url="a", raw_name="X 2160p")
+    b = Stream(title="X 1080p", url="b", raw_name="X 1080p")
+    assert rank([b, a])[0].url == "a"   # unchanged legacy behaviour

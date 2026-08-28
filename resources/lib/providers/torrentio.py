@@ -16,6 +16,7 @@ DEFAULT_HOST = "https://torrentio.strem.fun"
 
 _SIZE = re.compile(r"([\d.]+\s*[GMK]B)", re.IGNORECASE)
 _SEEDERS = re.compile(r"\U0001F464\s*(\d+)")  # 👤 N
+_HASH = re.compile(r"/([a-fA-F0-9]{40})/")   # infohash segment in the resolve URL
 _RES = [("2160p", ("2160", "4k", "uhd")), ("1080p", ("1080",)),
         ("720p", ("720",)), ("480p", ("480",))]
 
@@ -59,6 +60,7 @@ class TorrentioProvider(Provider):
                 or meta.split("👤")[0].strip()
             size = _SIZE.search(meta)
             seeders = _SEEDERS.search(meta)
+            infohash = _HASH.search(play_url)
             streams.append(Stream(
                 title=filename,
                 url=play_url,
@@ -66,6 +68,7 @@ class TorrentioProvider(Provider):
                 cached=True,
                 size=size.group(1) if size else "",
                 seeders=int(seeders.group(1)) if seeders else None,
+                infohash=infohash.group(1).lower() if infohash else "",
                 raw_name=name,
                 raw_description=meta,
             ))

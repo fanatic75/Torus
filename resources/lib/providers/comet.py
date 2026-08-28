@@ -48,6 +48,16 @@ def _seeders(description: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+_HASH = re.compile(r"[a-fA-F0-9]{40}")
+
+
+def _infohash(item: dict) -> str:
+    """Comet puts the infohash in behaviorHints.bingeGroup (comet|torbox|<hash>)."""
+    bg = (item.get("behaviorHints") or {}).get("bingeGroup", "")
+    match = _HASH.search(bg)
+    return match.group(0).lower() if match else ""
+
+
 class CometProvider(Provider):
     def __init__(self, torbox_key: str, host: str = DEFAULT_HOST,
                  cached_only: bool = True):
@@ -88,6 +98,7 @@ class CometProvider(Provider):
                 cached=("⚡" in name) or ("TB" in name),  # ⚡ marker
                 size=_size(description),
                 seeders=_seeders(description),
+                infohash=_infohash(item),
                 raw_name=name,
                 raw_description=description.replace("\n", " "),
             ))

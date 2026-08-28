@@ -84,3 +84,36 @@ def test_get_provider_by_setting(monkeypatch):
     assert isinstance(get_provider(), torrentio.TorrentioProvider)
     monkeypatch.setattr(config, "provider", lambda: "both")
     assert isinstance(get_provider(), MergedProvider)
+
+
+# --- infohash extraction + infohash-based dedup ---------------------------
+def test_comet_infohash_from_bingegroup():
+    assert comet._infohash({"behaviorHints": {"bingeGroup": "comet|torbox|" + "a" * 40}}) == "a" * 40
+    assert comet._infohash({"behaviorHints": {}}) == ""
+    assert comet._infohash({}) == ""
+
+
+def test_torrentio_infohash_from_url(monkeypatch):
+    ih = "b" * 40
+    payload = {"streams": [
+        {"url": "https://torrentio.strem.fun/resolve/torbox/KEY/%s/6/File.mkv" % ih,
+         "name": "Torrentio\n[TB+]", "title": "Movie 1080p",
+         "behaviorHints": {"filename": "File.mkv"}},
+    ]}
+    monkeypatch.setattr(torrentio, "get_json", lambda *a, **k: payload)
+    assert torrentio.TorrentioProvider("KEY").search("tt1", "movie")[0].infohash == ih
+
+
+def test_merged_dedups_by_infohash_prefers_first_provider():
+    ih = "c" * 40
+    tor = _Fake([Stream("Dark.S02E07.2160p-NTb", "torrentio-url", infohash=ih)])
+    com = _Fake([Stream("Totally Different Parsed Name", "comet-url", infohash=ih)])
+    # same torrent, different titles/urls -> deduped by infohash; first (Torrentio) kept
+    merged = MergedProvider([tor, com]).search("tt1", "series")
+    assert [s.url for s in merged] == ["torrentio-url"]
+
+
+def test_merged_keeps_different_infohashes():
+    tor = _Fake([Stream("A", "ua", infohash="a" * 40)])
+    com = _Fake([Stream("B", "ub", infohash="d" * 40)])
+    assert {s.url for s in MergedProvider([tor, com]).search("tt1", "series")} == {"ua", "ub"}

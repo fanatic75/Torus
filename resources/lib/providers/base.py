@@ -17,6 +17,7 @@ class Stream:
     cached: bool = True        # instantly available on TorBox
     size: str = ""             # human-readable size if known, e.g. "78.5 GB"
     seeders: int | None = None
+    infohash: str = ""         # torrent infohash (cryptographic id) for cross-provider dedup
     raw_name: str = ""
     raw_description: str = ""
 

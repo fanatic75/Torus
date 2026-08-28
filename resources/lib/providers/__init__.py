@@ -17,7 +17,9 @@ from .torrentio import TorrentioProvider
 
 
 def _dedup_key(stream: Stream) -> str:
-    return re.sub(r"[^a-z0-9]", "", stream.title.lower()) or stream.url
+    # Infohash is the cryptographic torrent id — the reliable "same release"
+    # signal across providers. Fall back to a normalized title, then the url.
+    return stream.infohash or re.sub(r"[^a-z0-9]", "", stream.title.lower()) or stream.url
 
 
 class MergedProvider(Provider):
@@ -58,5 +60,8 @@ def get_provider() -> Provider:
         return CometProvider(key)
     if name == "torrentio":
         return TorrentioProvider(key)
-    # default: merge both for coverage + resilience
-    return MergedProvider([CometProvider(key), TorrentioProvider(key)])
+    # Default: merge both for coverage + resilience. Torrentio FIRST so that when
+    # the same torrent (matched by infohash) comes from both, we keep Torrentio's
+    # URL — it redirects straight to the TorBox CDN, whereas Comet proxies the
+    # bytes through elfhosted, which is frequently slow/timing out.
+    return MergedProvider([TorrentioProvider(key), CometProvider(key)])

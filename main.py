@@ -20,7 +20,7 @@ import xbmcgui
 import xbmcplugin
 
 from resources.lib import auth, cinemeta, config, db, providers, ranking, release_groups
-from resources.lib.http import HttpError, log
+from resources.lib.http import HttpError, log, reachable
 from resources.lib.kodi import listing
 
 PLAYING_PROP = "torus.playing"
@@ -269,16 +269,29 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
     finish()
 
 
+PROBE_CANDIDATES = 4  # how many ranked sources to pre-flight before giving up
+
+
 def _resolve_best(imdb, mtype, season_number, episode_number, expected=""):
-    """Return the top-ranked Stream (not just its URL) so the caller can show
-    which release is playing. None if nothing cached. `expected` (the show/movie
-    title) makes ranking reject wrong-show releases from the auto-pick — so
-    one-click Play and next-episode never grab a mismatched result."""
+    """Rank candidates and return the first that passes a fast reachability probe,
+    so the auto-pick paths (one-click Play, Continue Watching, next-episode — none
+    of which have a visible source picker) never hand Kodi a dead or hung URL.
+
+    `expected` (show/movie title) keeps wrong-show releases out of the pick.
+    Falls back to the top candidate if none answer — better than nothing.
+    """
     provider = providers.get_provider()
     streams = ranking.rank(
         provider.search(imdb, mtype, season_number or None, episode_number or None),
         expected=expected, series=(mtype == "series"))
-    return streams[0] if streams else None
+    if not streams:
+        return None
+    if len(streams) == 1:
+        return streams[0]  # no alternative to probe toward — just play it
+    for stream in streams[:PROBE_CANDIDATES]:
+        if reachable(stream.url):
+            return stream
+    return streams[0]
 
 
 def _played_base_item(meta, mtype, season_number, episode_number, url):

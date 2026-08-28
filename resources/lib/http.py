@@ -136,6 +136,38 @@ def resolve(host: str) -> list:
 _REDIRECT_STATUS = (301, 302, 303, 307, 308)
 
 
+def reachable(url: str, timeout: int = 6) -> bool:
+    """Fast liveness probe for a stream URL: does the host answer within
+    `timeout`s? True on a 2xx or a redirect (the source is resolving fine).
+
+    We deliberately do NOT follow the redirect — the goal is to catch a dead or
+    hung host (e.g. Comet's elfhosted proxy timing out), NOT to wait on the CDN's
+    cold-start first byte, which is slow even for perfectly good sources. Used to
+    skip dead auto-pick sources before handing one to Kodi's player.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+        path = parts.path + (f"?{parts.query}" if parts.query else "")
+        ips = resolve(host)
+        if not ips:
+            return False
+        conn = None
+        try:
+            conn = _PinnedHTTPSConnection(host, ips[0], timeout)
+            conn.request("GET", path, headers=default_headers({"Range": "bytes=0-1"}))
+            status = conn.getresponse().status
+            return status in (200, 206) or status in _REDIRECT_STATUS
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    except Exception:  # noqa: BLE001 - timeout / connection error = not reachable
+        return False
+
+
 def get_json(url: str, params: dict | None = None,
              headers: dict | None = None, timeout: int = 20,
              max_redirects: int = 5) -> dict:

@@ -27,8 +27,13 @@ PLAYING_PROP = "torus.playing"
 # Rewind a few seconds on resume so it's easy to pick up where you left off.
 RESUME_REWIND = 10
 
-HANDLE = int(sys.argv[1])
-BASE_URL = sys.argv[0]
+# argv is a real plugin invocation only when Kodi launches us. Guard it so the
+# module stays importable under tests (HANDLE falls back to -1, a no-op handle).
+BASE_URL = sys.argv[0] if sys.argv and sys.argv[0].startswith("plugin://") else "plugin://plugin.video.torus/"
+try:
+    HANDLE = int(sys.argv[1])
+except (IndexError, ValueError):
+    HANDLE = -1
 
 
 # --- helpers ---------------------------------------------------------------

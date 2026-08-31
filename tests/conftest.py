@@ -5,6 +5,10 @@ We install minimal stubs so everything imports under plain CPython. We deliberat
 do NOT stub `xbmcaddon`/`xbmcvfs`, so `resources.lib.config` runs in its off-Kodi
 "dev" mode (settings from dev.config.json/defaults) — which keeps config/db tests
 deterministic and Kodi-free.
+
+The `xbmcplugin`/`xbmcgui.Window` stubs RECORD what the addon does (directory
+items added, resolved URLs, window properties) so router/handler tests can assert
+on behaviour. The `kodi` fixture resets and exposes those records.
 """
 import sys
 import types
@@ -18,6 +22,18 @@ def _stub(name):
         mod = types.ModuleType(name)
         sys.modules[name] = mod
     return mod
+
+
+# --- recorded state (see the `kodi` fixture) -------------------------------
+_DIR_ITEMS = []   # dicts: {handle, url, item, folder}
+_RESOLVED = []    # dicts: {handle, ok, item}
+_WIN = {}         # window properties (Window(id).setProperty/clearProperty)
+
+
+def _reset_records():
+    _DIR_ITEMS.clear()
+    _RESOLVED.clear()
+    _WIN.clear()
 
 
 # --- xbmc ------------------------------------------------------------------
@@ -79,9 +95,11 @@ class _Dialog:
 
 
 class _Window:
+    """Backed by the shared _WIN dict so tests can inspect window properties."""
     def __init__(self, *a, **k): pass
-    def getProperty(self, k): return ""
-    def setProperty(self, k, v): pass
+    def getProperty(self, k): return _WIN.get(k, "")
+    def setProperty(self, k, v): _WIN[k] = str(v)
+    def clearProperty(self, k): _WIN.pop(k, None)
 
 
 class _DialogProgress:
@@ -95,11 +113,16 @@ _xbmcgui.Dialog = _Dialog
 _xbmcgui.Window = _Window
 _xbmcgui.DialogProgress = _DialogProgress
 
-# --- xbmcplugin ------------------------------------------------------------
+# --- xbmcplugin (recording) ------------------------------------------------
 _xbmcplugin = _stub("xbmcplugin")
-for _fn in ("addDirectoryItem", "endOfDirectory", "setContent", "setResolvedUrl",
-            "setPluginCategory", "addSortMethod"):
-    setattr(_xbmcplugin, _fn, lambda *a, **k: None)
+_xbmcplugin.addDirectoryItem = lambda handle, url, item=None, isFolder=False, *a, **k: \
+    _DIR_ITEMS.append({"handle": handle, "url": url, "item": item, "folder": isFolder})
+_xbmcplugin.setResolvedUrl = lambda handle, ok, item, *a, **k: \
+    _RESOLVED.append({"handle": handle, "ok": ok, "item": item})
+_xbmcplugin.endOfDirectory = lambda *a, **k: None
+_xbmcplugin.setContent = lambda *a, **k: None
+_xbmcplugin.setPluginCategory = lambda *a, **k: None
+_xbmcplugin.addSortMethod = lambda *a, **k: None
 
 
 # --- fixtures --------------------------------------------------------------
@@ -110,3 +133,16 @@ def tmp_profile(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "profile_dir", lambda: str(tmp_path))
     monkeypatch.setattr(config, "_profile_dir", lambda: str(tmp_path))
     return tmp_path
+
+
+@pytest.fixture
+def kodi():
+    """Reset and expose what the addon told Kodi: directory items, resolved URLs,
+    and window properties."""
+    _reset_records()
+
+    class _View:
+        items = _DIR_ITEMS
+        resolved = _RESOLVED
+        win = _WIN
+    return _View()

@@ -647,6 +647,10 @@ def torbox_play(torrent_id, file_id) -> None:
         notify("Could not get a link from TorBox")
         xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
         return
+    # TorBox cloud files aren't IMDb-keyed. Clear the resume-tracking property
+    # (set by play()) so the background service doesn't save this file's position
+    # against the last movie's identity.
+    xbmcgui.Window(10000).clearProperty(PLAYING_PROP)
     xbmcplugin.setResolvedUrl(HANDLE, True, xbmcgui.ListItem(path=url))
 
 

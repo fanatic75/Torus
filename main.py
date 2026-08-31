@@ -19,7 +19,7 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
-from resources.lib import auth, cinemeta, config, db, providers, ranking, release_groups
+from resources.lib import auth, cinemeta, config, db, providers, ranking, release_groups, torbox
 from resources.lib.http import HttpError, log, reachable
 from resources.lib.kodi import listing
 
@@ -69,6 +69,7 @@ def home() -> None:
     add_directory("Continue Watching", "continue")
     add_directory("My List", "watchlist")
     if linked:
+        add_directory("☁  TorBox Cloud", "torbox_list")
         # No liveness check — "linked" is just token presence — so always offer a
         # relink to recover from an expired/revoked token or to switch accounts.
         # Same device-code dialog as first-time Link (shows URL + PIN);
@@ -594,6 +595,61 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
         _queue_next_episode(imdb, season_number, episode_number)
 
 
+# --- TorBox cloud library --------------------------------------------------
+def torbox_list() -> None:
+    """Browse the user's own TorBox files — a fallback when indexers come up empty."""
+    if not config.torbox_token():
+        notify("Link your TorBox account first")
+        finish()
+        return
+    shown = 0
+    for t in torbox.mylist():
+        vids = torbox.video_files(t)
+        if not vids:
+            continue
+        name = t.get("name") or vids[0].get("name") or "TorBox item"
+        if len(vids) == 1:
+            item = xbmcgui.ListItem(label=name)
+            item.setProperty("IsPlayable", "true")
+            item.getVideoInfoTag().setMediaType("video")
+            add_item(item, False, action="torbox_play",
+                     torrent_id=t.get("id"), file_id=vids[0].get("id"))
+        else:
+            add_directory(f"{name}  ({len(vids)})", "torbox_files", torrent_id=t.get("id"))
+        shown += 1
+    if not shown:
+        add_item(xbmcgui.ListItem(label="Your TorBox library has no video files"),
+                 False, action="noop")
+    finish("videos")
+
+
+def torbox_files(torrent_id) -> None:
+    torrent = torbox.get_torrent(torrent_id)
+    if not torrent:
+        notify("TorBox item not found")
+        finish()
+        return
+    for f in torbox.video_files(torrent):
+        item = xbmcgui.ListItem(label=f.get("short_name") or f.get("name") or "file")
+        item.setProperty("IsPlayable", "true")
+        item.getVideoInfoTag().setMediaType("video")
+        add_item(item, False, action="torbox_play", torrent_id=torrent_id, file_id=f.get("id"))
+    finish("videos")
+
+
+def torbox_play(torrent_id, file_id) -> None:
+    if not config.torbox_token():
+        notify("Link your TorBox account first")
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+    url = torbox.request_link(torrent_id, file_id)
+    if not url:
+        notify("Could not get a link from TorBox")
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+    xbmcplugin.setResolvedUrl(HANDLE, True, xbmcgui.ListItem(path=url))
+
+
 def placeholder(title: str) -> None:
     item = xbmcgui.ListItem(label=f"{title} — coming soon")
     add_item(item, False, action="noop")
@@ -646,6 +702,12 @@ def router(query_string: str) -> None:
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     elif action == "continue":
         continue_watching()
+    elif action == "torbox_list":
+        torbox_list()
+    elif action == "torbox_files":
+        torbox_files(params.get("torrent_id", ""))
+    elif action == "torbox_play":
+        torbox_play(params.get("torrent_id", ""), params.get("file_id", ""))
     elif action == "watchlist":
         watchlist()
     elif action == "wl_folder":

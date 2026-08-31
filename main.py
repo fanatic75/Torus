@@ -609,21 +609,21 @@ def torbox_list() -> None:
         return
     shown = 0
     for t in torbox.mylist():
-        vids = torbox.video_files(t)
-        if not vids:
+        fs = torbox.files(t)
+        if not fs:
             continue
-        name = t.get("name") or vids[0].get("name") or "TorBox item"
-        if len(vids) == 1:
+        name = t.get("name") or fs[0].get("name") or "TorBox item"
+        if len(fs) == 1:
             item = xbmcgui.ListItem(label=name)
             item.setProperty("IsPlayable", "true")
             item.getVideoInfoTag().setMediaType("video")
             add_item(item, False, action="torbox_play",
-                     torrent_id=t.get("id"), file_id=vids[0].get("id"))
+                     torrent_id=t.get("id"), file_id=fs[0].get("id"))
         else:
-            add_directory(f"{name}  ({len(vids)})", "torbox_files", torrent_id=t.get("id"))
+            add_directory(f"{name}  ({len(fs)})", "torbox_files", torrent_id=t.get("id"))
         shown += 1
     if not shown:
-        add_item(xbmcgui.ListItem(label="Your TorBox library has no video files"),
+        add_item(xbmcgui.ListItem(label="Your TorBox library is empty"),
                  False, action="noop")
     finish("videos")
 
@@ -634,7 +634,7 @@ def torbox_files(torrent_id) -> None:
         notify("TorBox item not found")
         finish()
         return
-    for f in torbox.video_files(torrent):
+    for f in torbox.files(torrent):
         item = xbmcgui.ListItem(label=f.get("short_name") or f.get("name") or "file")
         item.setProperty("IsPlayable", "true")
         item.getVideoInfoTag().setMediaType("video")

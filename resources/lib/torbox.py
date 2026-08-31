@@ -11,13 +11,6 @@ from .http import get_json
 
 API = "https://api.torbox.app/v1/api"
 
-_VIDEO_EXT = (".mkv", ".mp4", ".avi", ".m2ts", ".mov", ".wmv",
-              ".flv", ".webm", ".ts", ".m4v", ".mpg", ".mpeg")
-
-
-def is_video(name: str) -> bool:
-    return (name or "").lower().endswith(_VIDEO_EXT)
-
 
 def _bearer() -> dict:
     return {"Authorization": f"Bearer {config.torbox_token()}"}
@@ -40,9 +33,9 @@ def get_torrent(torrent_id) -> dict | None:
     return None
 
 
-def video_files(torrent: dict) -> list[dict]:
-    return [f for f in (torrent.get("files") or [])
-            if is_video(f.get("name") or f.get("short_name") or "")]
+def files(torrent: dict) -> list[dict]:
+    """All files in a torrent — no filtering, so nothing you own is ever hidden."""
+    return torrent.get("files") or []
 
 
 def request_link(torrent_id, file_id) -> str:

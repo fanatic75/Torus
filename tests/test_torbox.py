@@ -2,11 +2,10 @@
 from resources.lib import torbox
 
 
-def test_is_video():
-    assert torbox.is_video("Movie.2024.1080p.mkv")
-    assert torbox.is_video("clip.MP4")
-    assert not torbox.is_video("readme.txt")
-    assert not torbox.is_video("")
+def test_files_returns_all_unfiltered():
+    torrent = {"files": [{"name": "a.mkv"}, {"name": "b.nfo"}, {"short_name": "c.mp4"}]}
+    assert torbox.files(torrent) == torrent["files"]   # nothing hidden
+    assert torbox.files({}) == []                       # missing files key -> []
 
 
 def test_mylist_parses(monkeypatch):
@@ -28,12 +27,6 @@ def test_mylist_swallows_errors(monkeypatch):
         raise RuntimeError("api down")
     monkeypatch.setattr(torbox, "get_json", boom)
     assert torbox.mylist() == []
-
-
-def test_video_files_filters():
-    torrent = {"files": [{"name": "a.mkv"}, {"name": "b.nfo"}, {"short_name": "c.mp4"}]}
-    got = [f.get("name") or f.get("short_name") for f in torbox.video_files(torrent)]
-    assert got == ["a.mkv", "c.mp4"]
 
 
 def test_get_torrent_by_id(monkeypatch):
@@ -59,10 +52,6 @@ def test_request_link_empty_on_failure(monkeypatch):
         raise RuntimeError("down")
     monkeypatch.setattr(torbox, "get_json", boom)
     assert torbox.request_link(5, 2) == ""
-
-
-def test_video_files_missing_files_key():
-    assert torbox.video_files({}) == []
 
 
 def test_request_link_falls_back_to_bearer(monkeypatch):

@@ -39,25 +39,34 @@ def test_torbox_list_multifile_is_folder(kodi, monkeypatch):
     assert "action=torbox_files" in it["url"] and "torrent_id=2" in it["url"]
 
 
-def test_torbox_list_novideo_shows_message(kodi, monkeypatch):
+def test_torbox_list_empty_shows_message(kodi, monkeypatch):
     monkeypatch.setattr(main.config, "torbox_token", lambda: "KEY")
-    monkeypatch.setattr(main.torbox, "mylist",
-                        lambda: [_torrent(3, "Junk", [{"id": 1, "name": "readme.txt"}])])
+    monkeypatch.setattr(main.torbox, "mylist", lambda: [])
     main.torbox_list()
     assert len(kodi.items) == 1
     assert "action=noop" in kodi.items[0]["url"]
 
 
+def test_torbox_list_skips_torrents_with_no_files(kodi, monkeypatch):
+    monkeypatch.setattr(main.config, "torbox_token", lambda: "KEY")
+    monkeypatch.setattr(main.torbox, "mylist",
+                        lambda: [_torrent(1, "downloading", []),
+                                 _torrent(2, "Movie", [{"id": 9, "name": "movie.mkv"}])])
+    main.torbox_list()
+    assert len(kodi.items) == 1   # the file-less torrent is skipped
+    assert "torrent_id=2" in kodi.items[0]["url"]
+
+
 # --- torbox_files ----------------------------------------------------------
-def test_torbox_files_lists_only_videos(kodi, monkeypatch):
+def test_torbox_files_lists_all_files(kodi, monkeypatch):
     monkeypatch.setattr(main.torbox, "get_torrent",
                         lambda tid: _torrent(2, "Show", [{"id": 1, "name": "e1.mkv"},
                                                          {"id": 2, "name": "notes.nfo"},
                                                          {"id": 3, "short_name": "e2.mp4"}]))
     main.torbox_files("2")
-    assert len(kodi.items) == 2
+    assert len(kodi.items) == 3   # nothing filtered — all files listed
     assert all("action=torbox_play" in it["url"] for it in kodi.items)
-    assert "file_id=1" in kodi.items[0]["url"] and "file_id=3" in kodi.items[1]["url"]
+    assert [it["url"].count("file_id") for it in kodi.items] == [1, 1, 1]
 
 
 def test_torbox_files_not_found(kodi, monkeypatch):

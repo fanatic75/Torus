@@ -59,3 +59,24 @@ def test_request_link_empty_on_failure(monkeypatch):
         raise RuntimeError("down")
     monkeypatch.setattr(torbox, "get_json", boom)
     assert torbox.request_link(5, 2) == ""
+
+
+def test_video_files_missing_files_key():
+    assert torbox.video_files({}) == []
+
+
+def test_request_link_falls_back_to_bearer(monkeypatch):
+    monkeypatch.setattr(torbox.config, "torbox_token", lambda: "KEY")
+    seen = []
+    def fake(url, headers=None, **k):
+        seen.append("token=" in url)
+        return {"data": None} if "token=" in url else {"data": "https://cdn/from-bearer"}
+    monkeypatch.setattr(torbox, "get_json", fake)
+    assert torbox.request_link(1, 1) == "https://cdn/from-bearer"
+    assert seen == [True, False]   # tried token-query, then fell back to Bearer
+
+
+def test_request_link_both_styles_empty(monkeypatch):
+    monkeypatch.setattr(torbox.config, "torbox_token", lambda: "KEY")
+    monkeypatch.setattr(torbox, "get_json", lambda *a, **k: {"data": None})
+    assert torbox.request_link(1, 1) == ""

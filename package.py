@@ -205,6 +205,12 @@ kbd { background:#21262d; border:1px solid #30363d; border-radius:5px; padding:1
   <p>Yes — the addon is free and open-source (MIT). It relies on your paid TorBox account for the cached sources it plays.</p>
 </div>
 
+<div class="card" style="text-align:center">
+  <h2>⭐ Enjoying Torus?</h2>
+  <p style="color:#c9d1d9; margin:0 0 16px">If Torus made your setup easier, a <b>star on GitHub</b> would genuinely make my day — and it helps more people discover the addon. Thank you! 🙏</p>
+  <a class="dl" href="__GH__" style="background:#238636; border-color:#2ea043; color:#fff">⭐  Star Torus on GitHub</a>
+</div>
+
 <footer>
   Torus v__VERSION__ &middot; the TorBox Kodi addon &middot; <a href="__GH__">source on GitHub</a><br>
   Requires a TorBox account. Hosts no content, ships no indexers.

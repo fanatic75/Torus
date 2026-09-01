@@ -6,6 +6,7 @@ periodically and on pause/stop persists the play position to SQLite (keyed by
 IMDb id, never the torrent). That's what powers Resume and Continue Watching.
 """
 import json
+from urllib.parse import urlencode
 
 import xbmc
 import xbmcgui
@@ -84,6 +85,26 @@ class TorusPlayer(xbmc.Player):
         xbmcgui.Window(HOME).setProperty(PLAYING_PROP, json.dumps(state))
         xbmc.log(f"[Torus] source failed, retrying fallback {idx}", xbmc.LOGINFO)
         self.play(next_url, item)
+        # Playing a single URL replaces the video playlist, wiping the next-episode
+        # pointer main.py queued — so re-queue it, or a retried episode would lose
+        # autoplay-next / the ⏭ button.
+        self._requeue_next_episode(identity)
+
+    def _requeue_next_episode(self, identity):
+        if identity.get("mtype") != "series":
+            return
+        nxt = self._next_episode(identity)
+        if not nxt:
+            return
+        url = "plugin://plugin.video.torus/?" + urlencode({
+            "action": "play", "imdb": nxt["imdb"], "mtype": "series",
+            "season": nxt["season"], "episode": nxt["episode"]})
+        pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+        if any(pl[i].getPath() == url for i in range(len(pl))):
+            return
+        li = xbmcgui.ListItem(label="S%02dE%02d" % (nxt["season"], nxt["episode"]))
+        li.setProperty("IsPlayable", "true")
+        pl.add(url, li)
 
     def onAVStarted(self):
         if not self.identity:

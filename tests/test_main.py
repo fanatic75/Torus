@@ -153,3 +153,22 @@ def test_play_movie_stops_current_then_resolves(kodi, monkeypatch):
     main.play(imdb="tt1", mtype="movie", url="http://cdn/movie.mkv")
     assert kodi.player["stopped"] == 1
     assert kodi.resolved[-1]["ok"] is True
+
+
+def test_play_stashes_fallback_candidates(kodi, monkeypatch):
+    monkeypatch.setattr(main.config, "torbox_token", lambda: "KEY")
+    monkeypatch.setattr(main.cinemeta, "meta", lambda *a, **k: {})
+    monkeypatch.setattr(main.db, "get_progress", lambda *a, **k: None)
+    from resources.lib.providers.base import Stream
+    ranked = [Stream("A", "http://u0", raw_name="A"),
+              Stream("B", "http://u1", raw_name="B"),
+              Stream("C", "http://u2", raw_name="C"),
+              Stream("D", "http://u3", raw_name="D")]
+    monkeypatch.setattr(main, "_resolve_ranked", lambda *a, **k: ranked)
+    main.play(imdb="tt1", mtype="movie")   # auto-pick (no url)
+    import json
+    state = json.loads(kodi.win[main.PLAYING_PROP])
+    assert state["url"] == "http://u0"                       # top played
+    assert state["candidates"] == ["http://u0", "http://u1", "http://u2"]  # top 3 kept
+    assert state["cand_idx"] == 0
+    assert kodi.resolved[-1]["ok"] is True

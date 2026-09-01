@@ -20,7 +20,7 @@ import xbmcgui
 import xbmcplugin
 
 from resources.lib import auth, cinemeta, config, db, providers, ranking, release_groups, torbox
-from resources.lib.http import HttpError, log, reachable
+from resources.lib.http import HttpError, log
 from resources.lib.kodi import listing
 
 PLAYING_PROP = "torus.playing"
@@ -275,29 +275,18 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
     finish()
 
 
-PROBE_CANDIDATES = 4  # how many ranked sources to pre-flight before giving up
+FALLBACK_SOURCES = 3  # top-N sources kept for auto-retry when playback fails
 
 
-def _resolve_best(imdb, mtype, season_number, episode_number, expected=""):
-    """Rank candidates and return the first that passes a fast reachability probe,
-    so the auto-pick paths (one-click Play, Continue Watching, next-episode — none
-    of which have a visible source picker) never hand Kodi a dead or hung URL.
-
-    `expected` (show/movie title) keeps wrong-show releases out of the pick.
-    Falls back to the top candidate if none answer — better than nothing.
-    """
+def _resolve_ranked(imdb, mtype, season_number, episode_number, expected=""):
+    """Ranked candidate Streams (best first) for the auto-pick paths. Match-aware
+    (right show) and Torrentio-preferred (from the provider merge). The top one is
+    played; the next few are kept as fallbacks the service auto-retries if the
+    stream fails to open."""
     provider = providers.get_provider()
-    streams = ranking.rank(
+    return ranking.rank(
         provider.search(imdb, mtype, season_number or None, episode_number or None),
         expected=expected, series=(mtype == "series"))
-    if not streams:
-        return None
-    if len(streams) == 1:
-        return streams[0]  # no alternative to probe toward — just play it
-    for stream in streams[:PROBE_CANDIDATES]:
-        if reachable(stream.url):
-            return stream
-    return streams[0]
 
 
 def _played_base_item(meta, mtype, season_number, episode_number, url):
@@ -587,6 +576,7 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
             meta = {}
     expected = meta.get("name", "")
 
+    candidates = []
     if not url:  # one-click Play / Continue Watching
         # Always resolve a FRESH source. TorBox stream links are IP-locked and
         # time-limited, so reusing a stored URL breaks after an IP change or a
@@ -595,17 +585,19 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
             notify("Link your TorBox account first")
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
             return
-        stream = _resolve_best(imdb, mtype, season_number, episode_number, expected)
-        if not stream:
+        ranked = _resolve_ranked(imdb, mtype, season_number, episode_number, expected)
+        if not ranked:
             notify("No cached sources found")
             xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
             return
-        url = stream.url
+        best = ranked[0]
+        url = best.url
+        candidates = [s.url for s in ranked[:FALLBACK_SOURCES]]  # top + fallbacks
         # Carry the auto-picked release's details into the info panel.
-        title = title or stream.title
-        quality = quality or stream.quality
-        size = size or stream.size
-        seeders = seeders or (str(stream.seeders) if stream.seeders else "")
+        title = title or best.title
+        quality = quality or best.quality
+        size = size or best.size
+        seeders = seeders or (str(best.seeders) if best.seeders else "")
 
     item = _played_base_item(meta, mtype, season_number, episode_number, url)
     if not meta and title:  # no Cinemeta identity — at least name the release
@@ -625,11 +617,15 @@ def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
             item.setProperty("TotalTime", str(duration))
 
     if imdb:  # tell the service what's playing so it can persist progress + source url
-        xbmcgui.Window(10000).setProperty(PLAYING_PROP, json.dumps({
+        state = {
             "imdb": imdb, "mtype": mtype,
             "season": season_number or 0, "episode": episode_number or 0,
             "url": url,
-        }))
+        }
+        if candidates:  # let the service auto-retry the next source if this fails
+            state["candidates"] = candidates
+            state["cand_idx"] = 0
+        xbmcgui.Window(10000).setProperty(PLAYING_PROP, json.dumps(state))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
     # Series only: hand Kodi a next-episode to move to, so ⏭ / autoplay-next work.

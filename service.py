@@ -39,9 +39,51 @@ class TorusPlayer(xbmc.Player):
         self.last_ratio = 0.0
 
     def onPlayBackError(self):
-        # Playback failed to open (expired link, no network, ...). Never touch
-        # the resume point — just forget what we were trying to play.
+        # Playback failed to OPEN (dead/too-slow link, expired, no network). This
+        # fires only on a genuine failure — never on a user-initiated stop — so
+        # it's safe to auto-retry the next-best source. Resume point is untouched.
+        identity = self._read_identity()
         self.identity = None
+        self._retry_next_source(identity)
+
+    def _apply_resume(self, item, identity):
+        """Put the stored resume point on a retry item so it picks up where the
+        failed source left off (or where the user last watched)."""
+        try:
+            prog = db.get_progress(identity.get("imdb", ""),
+                                   identity.get("season", 0), identity.get("episode", 0))
+        except Exception:  # noqa: BLE001
+            prog = None
+        if prog and prog.get("duration"):
+            ratio = prog["position"] / prog["duration"]
+            if 0.01 < ratio < 0.95:
+                duration = float(prog["duration"])
+                resume_at = max(0.0, float(prog["position"]) - 10)
+                item.setProperty("ResumeTime", str(resume_at))
+                item.setProperty("TotalTime", str(duration))
+
+    def _retry_next_source(self, identity):
+        """When a source fails to open, play the next of the fallbacks main.py
+        stashed (top 3, Torrentio-preferred), carrying the resume point."""
+        if not identity:
+            return
+        candidates = identity.get("candidates") or []
+        idx = identity.get("cand_idx", 0) + 1
+        if idx >= len(candidates):
+            if candidates:  # we had fallbacks but they're exhausted
+                xbmcgui.Dialog().notification(
+                    "Torus", "Couldn't play — no working source",
+                    xbmcgui.NOTIFICATION_WARNING)
+            return
+        next_url = candidates[idx]
+        item = xbmcgui.ListItem(path=next_url)
+        self._apply_resume(item, identity)
+        state = dict(identity)
+        state["url"] = next_url
+        state["cand_idx"] = idx
+        xbmcgui.Window(HOME).setProperty(PLAYING_PROP, json.dumps(state))
+        xbmc.log(f"[Torus] source failed, retrying fallback {idx}", xbmc.LOGINFO)
+        self.play(next_url, item)
 
     def onAVStarted(self):
         if not self.identity:

@@ -28,7 +28,7 @@ def _stub(name):
 _DIR_ITEMS = []   # dicts: {handle, url, item, folder}
 _RESOLVED = []    # dicts: {handle, ok, item}
 _WIN = {}         # window properties (Window(id).setProperty/clearProperty)
-_PLAYER = {"playing": False, "stopped": 0}   # xbmc.Player() state
+_PLAYER = {"playing": False, "stopped": 0, "played": [], "played_items": []}  # xbmc.Player() state
 _PL = {"items": [], "pos": -1}               # xbmc.PlayList(VIDEO): item paths + position
 
 
@@ -37,6 +37,8 @@ def _reset_records():
     _RESOLVED.clear()
     _WIN.clear()
     _PLAYER.update(playing=False, stopped=0)
+    _PLAYER["played"] = []
+    _PLAYER["played_items"] = []
     _PL["items"] = []
     _PL["pos"] = -1
 
@@ -136,7 +138,9 @@ class _Player:
     def isPlaying(self): return _PLAYER["playing"]
     def isPlayingVideo(self): return _PLAYER["playing"]
     def stop(self): _PLAYER["stopped"] += 1
-    def play(self, *a, **k): pass
+    def play(self, *a, **k):
+        _PLAYER["played"].append(a[0] if a else None)
+        _PLAYER["played_items"].append(a[1] if len(a) > 1 else None)
     def getPlayingFile(self): return ""
 
 

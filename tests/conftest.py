@@ -28,12 +28,17 @@ def _stub(name):
 _DIR_ITEMS = []   # dicts: {handle, url, item, folder}
 _RESOLVED = []    # dicts: {handle, ok, item}
 _WIN = {}         # window properties (Window(id).setProperty/clearProperty)
+_PLAYER = {"playing": False, "stopped": 0}   # xbmc.Player() state
+_PL = {"items": [], "pos": -1}               # xbmc.PlayList(VIDEO): item paths + position
 
 
 def _reset_records():
     _DIR_ITEMS.clear()
     _RESOLVED.clear()
     _WIN.clear()
+    _PLAYER.update(playing=False, stopped=0)
+    _PL["items"] = []
+    _PL["pos"] = -1
 
 
 # --- xbmc ------------------------------------------------------------------
@@ -125,6 +130,33 @@ _xbmcplugin.setPluginCategory = lambda *a, **k: None
 _xbmcplugin.addSortMethod = lambda *a, **k: None
 
 
+# --- xbmc.Player / xbmc.PlayList (recording) -------------------------------
+class _Player:
+    def __init__(self, *a, **k): pass
+    def isPlaying(self): return _PLAYER["playing"]
+    def isPlayingVideo(self): return _PLAYER["playing"]
+    def stop(self): _PLAYER["stopped"] += 1
+    def play(self, *a, **k): pass
+    def getPlayingFile(self): return ""
+
+
+class _PlayList:
+    def __init__(self, *a, **k): pass
+    def getposition(self): return _PL["pos"]
+    def __len__(self): return len(_PL["items"])
+    def __getitem__(self, i):
+        li = _ListItem()
+        li.setPath(_PL["items"][i])
+        return li
+    def add(self, url, listitem=None, index=None, *a, **k): _PL["items"].append(url)
+    def remove(self, path): _PL["items"][:] = [p for p in _PL["items"] if p != path]
+    def clear(self): _PL["items"].clear()
+
+
+_xbmc.Player = _Player
+_xbmc.PlayList = _PlayList
+
+
 # --- fixtures --------------------------------------------------------------
 @pytest.fixture
 def tmp_profile(tmp_path, monkeypatch):
@@ -145,4 +177,6 @@ def kodi():
         items = _DIR_ITEMS
         resolved = _RESOLVED
         win = _WIN
+        player = _PLAYER
+        playlist = _PL
     return _View()

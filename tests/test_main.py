@@ -97,3 +97,46 @@ def test_torbox_play_requires_token(kodi, monkeypatch):
     monkeypatch.setattr(main.config, "torbox_token", lambda: "")
     main.torbox_play("1", "5")
     assert kodi.resolved[-1]["ok"] is False
+
+
+# --- stop-current-on-new-pick (movie-switch bug) --------------------------
+def test_fresh_movie_pick_stops_current(kodi):
+    kodi.player["playing"] = True
+    main._stop_current_if_switching("tt1", "movie", 0, 0)
+    assert kodi.player["stopped"] == 1
+
+
+def test_nothing_playing_no_stop(kodi):
+    kodi.player["playing"] = False
+    main._stop_current_if_switching("tt1", "movie", 0, 0)
+    assert kodi.player["stopped"] == 0
+
+
+def test_next_episode_advance_does_not_stop(kodi):
+    # the video playlist is advancing to the pointer we queued for S1E2
+    ptr = main.build_url(action="play", imdb="tt9", mtype="series", season=1, episode=2)
+    kodi.playlist["items"] = [ptr]
+    kodi.playlist["pos"] = 0
+    kodi.player["playing"] = True
+    main._stop_current_if_switching("tt9", "series", 1, 2)
+    assert kodi.player["stopped"] == 0   # advance -> keep flowing
+
+
+def test_fresh_series_pick_stops_current(kodi):
+    # playlist holds a DIFFERENT show's pointer -> this pick isn't an advance
+    other = main.build_url(action="play", imdb="ttX", mtype="series", season=3, episode=3)
+    kodi.playlist["items"] = [other]
+    kodi.playlist["pos"] = 0
+    kodi.player["playing"] = True
+    main._stop_current_if_switching("tt9", "series", 1, 1)
+    assert kodi.player["stopped"] == 1
+
+
+def test_play_movie_stops_current_then_resolves(kodi, monkeypatch):
+    monkeypatch.setattr(main.config, "torbox_token", lambda: "KEY")
+    monkeypatch.setattr(main.cinemeta, "meta", lambda *a, **k: {})
+    monkeypatch.setattr(main.db, "get_progress", lambda *a, **k: None)
+    kodi.player["playing"] = True
+    main.play(imdb="tt1", mtype="movie", url="http://cdn/movie.mkv")
+    assert kodi.player["stopped"] == 1
+    assert kodi.resolved[-1]["ok"] is True

@@ -535,8 +535,43 @@ def wl_remove(imdb) -> None:
     _after_watchlist_change()
 
 
+def _is_playlist_advance(imdb, mtype, season_number, episode_number) -> bool:
+    """True when this play() is the video playlist advancing to the next-episode
+    pointer we queued (⏭ / autoplay-next), rather than a fresh user pick."""
+    if mtype != "series":
+        return False
+    pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+    pos = pl.getposition()
+    if pos < 0 or pos >= len(pl):
+        return False
+    this_ptr = build_url(action="play", imdb=imdb, mtype="series",
+                         season=season_number, episode=episode_number)
+    try:
+        return pl[pos].getPath() == this_ptr
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _stop_current_if_switching(imdb, mtype, season_number, episode_number) -> None:
+    """On a fresh pick, stop the currently-playing item immediately — otherwise
+    Kodi keeps it alive (and un-pauses it) on screen while the newly-picked stream
+    buffers. Skipped for a next-episode playlist advance, which must flow through."""
+    player = xbmc.Player()
+    if not player.isPlaying():
+        return
+    if _is_playlist_advance(imdb, mtype, season_number, episode_number):
+        return
+    try:
+        player.stop()
+    except Exception:  # noqa: BLE001 - best-effort
+        pass
+
+
 def play(imdb="", mtype="movie", season_number=0, episode_number=0, url=None,
          title="", quality="", size="", seeders="") -> None:
+    # Switching from another movie? Stop it now so it doesn't play on while the
+    # new pick buffers (guarded so next-episode autoplay isn't interrupted).
+    _stop_current_if_switching(imdb, mtype, season_number, episode_number)
     progress = db.get_progress(imdb, season_number, episode_number) if imdb else None
 
     # Cinemeta identity (best-effort, never blocks playback): feeds both the info

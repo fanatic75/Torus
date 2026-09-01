@@ -7,7 +7,7 @@
 -->
 <addon id="plugin.video.torus"
        name="Torus"
-       version="1.2.2"
+       version="1.2.3"
        provider-name="Prateek Banga">
 
     <requires>

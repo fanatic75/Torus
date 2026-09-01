@@ -542,7 +542,10 @@ def _is_playlist_advance(imdb, mtype, season_number, episode_number) -> bool:
         return False
     pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
     pos = pl.getposition()
-    if pos < 0 or pos >= len(pl):
+    # A genuine advance moves INTO this item from a previous one, so pos > 0.
+    # A freshly-picked episode sits at position 0 of a new transient playlist
+    # (its path also matches this_ptr) — that's a fresh pick, NOT an advance.
+    if pos <= 0 or pos >= len(pl):
         return False
     this_ptr = build_url(action="play", imdb=imdb, mtype="series",
                          season=season_number, episode=episode_number)

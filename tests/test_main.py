@@ -113,13 +113,26 @@ def test_nothing_playing_no_stop(kodi):
 
 
 def test_next_episode_advance_does_not_stop(kodi):
-    # the video playlist is advancing to the pointer we queued for S1E2
+    # a genuine advance: we finished the prev episode (pos 0) and moved INTO the
+    # queued S1E2 pointer at pos 1
+    prev = "http://cdn/previous-episode.mkv"
     ptr = main.build_url(action="play", imdb="tt9", mtype="series", season=1, episode=2)
-    kodi.playlist["items"] = [ptr]
-    kodi.playlist["pos"] = 0
+    kodi.playlist["items"] = [prev, ptr]
+    kodi.playlist["pos"] = 1
     kodi.player["playing"] = True
     main._stop_current_if_switching("tt9", "series", 1, 2)
     assert kodi.player["stopped"] == 0   # advance -> keep flowing
+
+
+def test_fresh_series_episode_pick_stops_current(kodi):
+    # regression: a freshly-picked episode is at pos 0 and its path matches the
+    # pointer we'd queue — must still be treated as a fresh pick and stop.
+    ptr = main.build_url(action="play", imdb="tt9", mtype="series", season=1, episode=1)
+    kodi.playlist["items"] = [ptr]
+    kodi.playlist["pos"] = 0
+    kodi.player["playing"] = True
+    main._stop_current_if_switching("tt9", "series", 1, 1)
+    assert kodi.player["stopped"] == 1   # pos 0 -> fresh pick -> stop
 
 
 def test_fresh_series_pick_stops_current(kodi):

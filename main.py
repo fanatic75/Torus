@@ -247,15 +247,32 @@ def cw_menu(imdb, mtype="movie", season_number=0, episode_number=0) -> None:
     source) or Choose source (open the ranked source list; picking one resumes)."""
     choice = xbmcgui.Dialog().contextmenu(["▶  Play", "☰  Choose source"])
     if choice == 0:
-        url = build_url(action="play", imdb=imdb, mtype=mtype,
-                        season=season_number, episode=episode_number)
-        xbmc.executebuiltin(f"PlayMedia({url})")
+        _play_via_playlist(imdb, mtype, season_number, episode_number)
     elif choice == 1:
         url = build_url(action="sources", imdb=imdb, mtype=mtype,
                         season=season_number, episode=episode_number)
         xbmc.executebuiltin(f"Container.Update({url})")
     if HANDLE >= 0:  # close the transient directory the click opened
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+
+
+def _play_via_playlist(imdb, mtype, season_number, episode_number) -> None:
+    """Start playback through PLAYLIST_VIDEO (NOT PlayMedia).
+
+    play() queues a lazy next-episode pointer into PLAYLIST_VIDEO so Kodi can
+    autoplay the next episode at end. PlayMedia() plays a lone item *outside*
+    that playlist, so the queued pointer never advances — which silently breaks
+    autoplay-next for anything launched from the Continue Watching popover. We
+    seed the playlist with the current episode and let play()'s 1-ahead chain
+    take over from there."""
+    url = build_url(action="play", imdb=imdb, mtype=mtype,
+                    season=season_number, episode=episode_number)
+    li = xbmcgui.ListItem(path=url)
+    li.setProperty("IsPlayable", "true")
+    pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+    pl.clear()  # drop any stale pointers from a previous show
+    pl.add(url, li)
+    xbmc.Player().play(pl)
 
 
 # --- sources + playback ----------------------------------------------------

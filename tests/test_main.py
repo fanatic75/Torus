@@ -123,15 +123,20 @@ def _dialog_returning(monkeypatch, choice):
     monkeypatch.setattr(main.xbmcgui, "Dialog", lambda: _D())
 
 
-def test_cw_menu_play_resolves_best_source(kodi, monkeypatch):
+def test_cw_menu_play_launches_via_playlist_for_autoplay_next(kodi, monkeypatch):
+    # REGRESSION: Play must launch through PLAYLIST_VIDEO, not PlayMedia — a lone
+    # PlayMedia item sits outside the playlist so the queued next-episode pointer
+    # never auto-advances (autoplay-next silently breaks from Continue Watching).
     calls = _capture_builtins(monkeypatch)
     _dialog_returning(monkeypatch, 0)  # "Play"
     main.cw_menu("tt1", "series", 2, 5)
-    assert len(calls) == 1
-    cmd = calls[0]
-    assert cmd.startswith("PlayMedia(")
-    assert "action=play" in cmd and "imdb=tt1" in cmd
-    assert "season=2" in cmd and "episode=5" in cmd
+    assert not any(c.startswith("PlayMedia(") for c in calls)   # never PlayMedia
+    # the current episode is seeded into the video playlist and Player().play()'d
+    assert kodi.playlist["items"], "episode not queued into PLAYLIST_VIDEO"
+    ptr = kodi.playlist["items"][0]
+    assert "action=play" in ptr and "imdb=tt1" in ptr
+    assert "season=2" in ptr and "episode=5" in ptr
+    assert kodi.player["played"], "Player().play() was not called"
 
 
 def test_cw_menu_choose_source_opens_source_list(kodi, monkeypatch):

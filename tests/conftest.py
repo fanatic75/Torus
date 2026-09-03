@@ -140,8 +140,14 @@ class _Player:
     def isPlayingVideo(self): return _PLAYER["playing"]
     def stop(self): _PLAYER["stopped"] += 1
     def play(self, *a, **k):
-        _PLAYER["played"].append(a[0] if a else None)
+        item = a[0] if a else None
+        _PLAYER["played"].append(item)
         _PLAYER["played_items"].append(a[1] if len(a) > 1 else None)
+        _PLAYER["playing"] = True
+        # Playing a PlayList makes Kodi start at item 0 — model that so tests can
+        # simulate autoplay-next advancing through PLAYLIST_VIDEO.
+        if hasattr(item, "getposition"):
+            _PL["pos"] = 0 if _PL["items"] else -1
     def getPlayingFile(self): return ""
 
 

@@ -65,6 +65,7 @@ def _connect() -> sqlite3.Connection:
         "ALTER TABLE watchlist ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE watchlist ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE folders ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE folders ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
     ):
         try:
             conn.execute(stmt)
@@ -143,22 +144,56 @@ def clear_progress(imdb, season=0, episode=0) -> None:
 
 
 # --- watchlist -------------------------------------------------------------
+def _anchored_insert(entries, new_entry):
+    """Place `new_entry` as the topmost UNPINNED slot while every pinned entry
+    keeps its exact index. `entries` is the current display order (each a dict
+    with a truthy/falsy 'pinned'); returns the new ordered list. This is how a
+    freshly-added title lands at the top without shoving pinned items down."""
+    n = len(entries)
+    pinned_at = {i: e for i, e in enumerate(entries) if e.get("pinned")}
+    flow = [new_entry] + [e for e in entries if not e.get("pinned")]
+    result, fi = [None] * (n + 1), 0
+    for i in range(n + 1):
+        if i in pinned_at:
+            result[i] = pinned_at[i]
+        else:
+            result[i] = flow[fi]
+            fi += 1
+    return result
+
+
 def add_watchlist(imdb, mtype, name="", poster="", folder_id=None) -> None:
     conn = _connect()
     try:
-        # New titles land at the top of their container (position below the
-        # current minimum), matching the previous newest-first behaviour.
-        top = conn.execute(
-            "SELECT COALESCE(MIN(position), 0) - 1 FROM watchlist WHERE folder_id IS ?",
-            (folder_id,)).fetchone()[0]
         conn.execute(
             "INSERT OR REPLACE INTO watchlist "
             "(imdb, mtype, name, poster, folder_id, pinned, position, added_at) "
-            "VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
-            (imdb, mtype, name, poster, folder_id, top, int(time.time())))
+            "VALUES (?, ?, ?, ?, ?, 0, 0, ?)",
+            (imdb, mtype, name, poster, folder_id, int(time.time())))
         conn.commit()
     finally:
         conn.close()
+    _place_new_on_top(imdb, folder_id)
+
+
+def _place_root_key_on_top(key) -> None:
+    """Insert a root entry key ('t:<imdb>' or 'f:<id>') as the topmost unpinned
+    slot in the unified root order, pinned entries anchored."""
+    entries = [e for e in list_root_entries() if e.get("key") != key]
+    ordered = _anchored_insert(entries, {"key": key, "pinned": 0})
+    set_root_order([e["key"] for e in ordered])
+
+
+def _place_new_on_top(imdb, folder_id) -> None:
+    """Re-lay the container so the just-added `imdb` is the topmost unpinned
+    entry, pinned entries anchored. Root = folders + titles interleaved; inside a
+    folder = titles only."""
+    if folder_id is None:
+        _place_root_key_on_top(f"t:{imdb}")
+    else:
+        entries = [r for r in list_watchlist(folder_id) if r["imdb"] != imdb]
+        ordered = _anchored_insert(entries, {"imdb": imdb, "pinned": 0})
+        set_watchlist_order([e["imdb"] for e in ordered])
 
 
 # --- watchlist folders -----------------------------------------------------
@@ -181,13 +216,14 @@ def create_folder(name) -> int | None:
         if existing is not None:
             return existing
         cur = conn.execute(
-            "INSERT INTO folders (name, created_at, position) "
-            "VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM folders))",
+            "INSERT INTO folders (name, created_at, position, pinned) VALUES (?, ?, 0, 0)",
             (name, int(time.time())))
         conn.commit()
-        return cur.lastrowid
+        fid = cur.lastrowid
     finally:
         conn.close()
+    _place_root_key_on_top(f"f:{fid}")  # new folder joins the unified order at top
+    return fid
 
 
 def rename_folder(folder_id, name) -> bool:
@@ -213,7 +249,7 @@ def list_folders() -> list[dict]:
     conn = _connect()
     try:
         rows = conn.execute("""
-            SELECT f.id, f.name, COUNT(w.imdb) AS count
+            SELECT f.id, f.name, COUNT(w.imdb) AS count, f.pinned, f.position
             FROM folders f
             LEFT JOIN watchlist w ON w.folder_id = f.id
             GROUP BY f.id, f.name
@@ -221,7 +257,7 @@ def list_folders() -> list[dict]:
         """).fetchall()
     finally:
         conn.close()
-    return [dict(zip(("id", "name", "count"), r)) for r in rows]
+    return [dict(zip(("id", "name", "count", "pinned", "position"), r)) for r in rows]
 
 
 def get_folder(folder_id) -> dict | None:
@@ -252,6 +288,7 @@ def move_to_folder(imdb, folder_id) -> None:
         conn.commit()
     finally:
         conn.close()
+    _place_new_on_top(imdb, folder_id)  # lands at the top of its new container
 
 
 def remove_watchlist(imdb) -> None:
@@ -280,22 +317,75 @@ def watchlist_ids() -> set:
 
 
 def list_watchlist(folder_id=None, limit=300) -> list[dict]:
-    """Titles in a folder. folder_id None = root (top-level, un-foldered) items."""
+    """Titles in a folder, in the user's manual order. folder_id None = root
+    (top-level, un-foldered) items. Pins do NOT float — they hold their slot
+    (see _anchored_insert); the flag is returned only for the 📌 badge."""
     conn = _connect()
     try:
-        # Pinned first, then manual order (position), newest as the final tiebreak.
         rows = conn.execute(
             "SELECT imdb, mtype, name, poster, pinned FROM watchlist "
             "WHERE folder_id IS ? "
-            "ORDER BY pinned DESC, position ASC, added_at DESC LIMIT ?",
+            "ORDER BY position ASC, added_at DESC LIMIT ?",
             (folder_id, limit)).fetchall()
     finally:
         conn.close()
     return [dict(zip(("imdb", "mtype", "name", "poster", "pinned"), r)) for r in rows]
 
 
+def list_root_entries() -> list[dict]:
+    """The unified My List root: custom folders AND un-foldered titles merged
+    into one user-ordered sequence (a folder can sit between two titles). Each
+    entry carries a 'kind' ('folder'|'title'), a 'key' ('f:<id>'/'t:<imdb>'),
+    'pinned', and 'position'."""
+    conn = _connect()
+    try:
+        frows = conn.execute("""
+            SELECT f.id, f.name, COUNT(w.imdb) AS count, f.pinned, f.position, f.created_at
+            FROM folders f LEFT JOIN watchlist w ON w.folder_id = f.id
+            GROUP BY f.id, f.name
+        """).fetchall()
+        trows = conn.execute(
+            "SELECT imdb, mtype, name, poster, pinned, position, added_at "
+            "FROM watchlist WHERE folder_id IS NULL").fetchall()
+    finally:
+        conn.close()
+    entries = []
+    for r in frows:
+        entries.append({"kind": "folder", "key": f"f:{r[0]}", "id": r[0], "name": r[1],
+                        "count": r[2], "pinned": r[3], "position": r[4], "_t": r[5] or 0})
+    for r in trows:
+        entries.append({"kind": "title", "key": f"t:{r[0]}", "imdb": r[0], "mtype": r[1],
+                        "name": r[2], "poster": r[3], "pinned": r[4], "position": r[5],
+                        "_t": r[6] or 0})
+    # position is the primary order; the tiebreak only matters before the first
+    # reorder (fresh/migrated rows share position 0): folders first, then newest.
+    entries.sort(key=lambda e: (e["position"],
+                                0 if e["kind"] == "folder" else 1,
+                                -e["_t"]))
+    for e in entries:
+        e.pop("_t", None)
+    return entries
+
+
+def set_root_order(ordered_keys) -> None:
+    """Assign positions 0..n across the merged root, writing each key back to its
+    own table ('f:<id>' → folders, 't:<imdb>' → watchlist)."""
+    conn = _connect()
+    try:
+        for i, key in enumerate(ordered_keys):
+            kind, _, ident = key.partition(":")
+            if kind == "f":
+                conn.execute("UPDATE folders SET position=? WHERE id=?", (i, int(ident)))
+            else:
+                conn.execute("UPDATE watchlist SET position=? WHERE imdb=?", (i, ident))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def set_pinned(imdb, pinned: bool) -> None:
-    """Pin/unpin a watchlist title. Pinned titles float to the top of their folder."""
+    """Pin/unpin a watchlist title. Pinning anchors it in place (see
+    _anchored_insert); it does not move the item."""
     conn = _connect()
     try:
         conn.execute("UPDATE watchlist SET pinned=? WHERE imdb=?",
@@ -309,6 +399,26 @@ def is_pinned(imdb) -> bool:
     conn = _connect()
     try:
         row = conn.execute("SELECT pinned FROM watchlist WHERE imdb=?", (imdb,)).fetchone()
+    finally:
+        conn.close()
+    return bool(row and row[0])
+
+
+def set_folder_pinned(folder_id, pinned: bool) -> None:
+    """Pin/unpin a folder (anchors it in the unified root order)."""
+    conn = _connect()
+    try:
+        conn.execute("UPDATE folders SET pinned=? WHERE id=?",
+                     (1 if pinned else 0, int(folder_id)))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_folder_pinned(folder_id) -> bool:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT pinned FROM folders WHERE id=?", (int(folder_id),)).fetchone()
     finally:
         conn.close()
     return bool(row and row[0])

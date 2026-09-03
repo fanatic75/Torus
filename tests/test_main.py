@@ -156,19 +156,54 @@ def _urls(kodi):
     return [it["url"] for it in kodi.items]
 
 
-def test_watchlist_shows_manage_buttons_when_nonempty(kodi, tmp_profile):
+def test_watchlist_shows_single_options_row(kodi, tmp_profile):
     main.db.add_watchlist("tt1", "movie", "M", "", None)
     main.watchlist()
     urls = " ".join(_urls(kodi))
-    assert "action=wl_reorder" in urls
-    assert "action=wl_pinmode" in urls
-    assert "action=wl_newfolder" in urls
+    assert "action=wl_options" in urls               # one entry point
+    # reorder/pin are behind the popover, not direct rows
+    assert "action=wl_reorder" not in urls and "action=wl_pinmode" not in urls
 
 
-def test_empty_watchlist_has_no_manage_buttons(kodi, tmp_profile):
+def test_empty_watchlist_offers_new_folder_not_options(kodi, tmp_profile):
     main.watchlist()
     urls = " ".join(_urls(kodi))
-    assert "action=wl_reorder" not in urls and "action=wl_pinmode" not in urls
+    assert "action=wl_newfolder" in urls
+    assert "action=wl_options" not in urls
+
+
+def test_watchlist_unified_order_folder_between_titles(kodi, tmp_profile):
+    main.db.add_watchlist("a", "movie", "A", "", None)
+    fid = main.db.create_folder("Fold")
+    main.db.add_watchlist("b", "movie", "B", "", None)
+    main.db.set_root_order(["t:b", f"f:{fid}", "t:a"])   # folder wedged between titles
+    main.watchlist()
+    # rows after the Options row, in unified order
+    urls = [u for u in _urls(kodi) if "wl_options" not in u]
+    assert urls[0].endswith("imdb=b") or "imdb=b" in urls[0]
+    assert f"folder={fid}" in urls[1]                     # folder in the middle
+    assert "imdb=a" in urls[2]
+
+
+def test_options_root_newfolder_dispatch(kodi, tmp_profile, monkeypatch):
+    main.db.add_watchlist("tt1", "movie", "M", "", None)
+    picked = {}
+    monkeypatch.setattr(main.xbmcgui, "Dialog",
+                        lambda: type("D", (), {"contextmenu": lambda s, x: 0})())  # New folder
+    monkeypatch.setattr(main, "wl_newfolder", lambda: picked.setdefault("nf", True))
+    main.wl_options(None)
+    assert picked.get("nf") is True
+
+
+def test_options_folder_reorder_dispatch(kodi, tmp_profile, monkeypatch):
+    fid = main.db.create_folder("F")
+    calls = []
+    monkeypatch.setattr(main.xbmc, "executebuiltin", lambda c, *a, **k: calls.append(c))
+    monkeypatch.setattr(main.xbmcgui, "Dialog",
+                        lambda: type("D", (), {"contextmenu": lambda s, x: 0})())  # Reorder
+    main.wl_options(fid)
+    assert any("Container.Update" in c and "action=wl_reorder" in c and f"folder={fid}" in c
+               for c in calls)
 
 
 def test_reorder_screen_rows_are_grabbable_when_idle(kodi, tmp_profile):
@@ -210,13 +245,22 @@ def test_drop_to_bottom(kodi, tmp_profile):
     assert [r["imdb"] for r in main.db.list_watchlist()] == ["tt2", "tt1", "tt3"]
 
 
-def test_drop_reorders_folders(kodi, tmp_profile):
-    a = main.db.create_folder("A")
-    b = main.db.create_folder("B")
-    c = main.db.create_folder("C")           # order A, B, C
-    main.wl_grab(f"f:{c}", None)
-    main.wl_drop(f"f:{a}", None)             # move C before A
-    assert [f["id"] for f in main.db.list_folders()] == [c, a, b]
+def test_drop_interleaves_folder_and_title(kodi, tmp_profile):
+    main.db.add_watchlist("a", "movie", "A", "", None)
+    fid = main.db.create_folder("Fold")
+    main.db.add_watchlist("b", "movie", "B", "", None)
+    # unified root starts b, folder, a (newest on top). Grab the folder, drop at bottom.
+    main.wl_grab(f"f:{fid}", None)
+    main.wl_drop("__bottom__", None)
+    assert [e["key"] for e in main.db.list_root_entries()] == ["t:b", "t:a", f"f:{fid}"]
+
+
+def test_drop_moves_title_below_a_folder(kodi, tmp_profile):
+    main.db.add_watchlist("a", "movie", "A", "", None)
+    fid = main.db.create_folder("Fold")     # root: folder, a
+    main.wl_grab("t:a", None)               # move title a above the folder
+    main.wl_drop(f"f:{fid}", None)
+    assert [e["key"] for e in main.db.list_root_entries()] == ["t:a", f"f:{fid}"]
 
 
 def test_grabcancel_clears_state(kodi, tmp_profile):
@@ -238,11 +282,28 @@ def test_pinmode_lists_toggles_and_toggle_flips(kodi, tmp_profile):
     main.wl_pinmode(None)
     urls = _urls(kodi)
     assert any("action=wl_pinmode_done" in u for u in urls)
-    assert any("action=wl_pintoggle" in u and "imdb=tt1" in u for u in urls)
-    main.wl_pintoggle("tt1", None)
+    assert any("action=wl_pintoggle" in u and "key=t" in u for u in urls)  # key-based
+    main.wl_pintoggle("t:tt1", None)
     assert main.db.is_pinned("tt1") is True
-    main.wl_pintoggle("tt1", None)
+    main.wl_pintoggle("t:tt1", None)
     assert main.db.is_pinned("tt1") is False
+
+
+def test_pinmode_can_pin_a_folder(kodi, tmp_profile):
+    fid = main.db.create_folder("Fold")
+    main.wl_pinmode(None)                      # root pin screen lists the folder
+    assert any(f"key=f" in u for u in _urls(kodi))
+    main.wl_pintoggle(f"f:{fid}", None)
+    assert main.db.is_folder_pinned(fid) is True
+
+
+def test_pin_anchors_title_when_new_one_added(kodi, tmp_profile):
+    # end-to-end through the handlers: pin holds its slot as a new title arrives
+    for i in (1, 2, 3):
+        main.db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)   # tt3, tt2, tt1
+    main.wl_pintoggle("t:tt3", None)          # pin the top one
+    main.db.add_watchlist("tt4", "movie", "M4", "", None)
+    assert [r["imdb"] for r in main.db.list_watchlist()] == ["tt3", "tt4", "tt2", "tt1"]
 
 
 # --- stop-current-on-new-pick (movie-switch bug) --------------------------

@@ -415,83 +415,135 @@ def _add_watchlist_row(row) -> None:
     meta_like = {"id": row["imdb"], "name": row["name"],
                  "type": row["mtype"], "poster": row["poster"]}
     item = listing.catalog_item(meta_like)
-    if row.get("pinned"):  # pinned titles carry a badge and float to the top
+    if row.get("pinned"):  # pinned titles carry a badge (they hold their slot)
         item.setLabel(f"📌  {item.getLabel()}")
-    item.addContextMenuItems(
-        _watchlist_ctx(row["imdb"], row["mtype"], row["name"], row["poster"], True))
     add_item(item, True, action="detail", imdb=row["imdb"], mtype=row["mtype"])
 
 
-def _manage_buttons(folder_id) -> None:
-    """Reorder / Pin buttons — OK-driven so a bare TV remote (no context menu)
-    can still manage the list. Shown only when the container has items."""
-    kw = _folder_kw(folder_id)
-    reorder = xbmcgui.ListItem(label="⇅  Reorder")
-    reorder.setArt({"icon": "DefaultAddonsUpdates.png"})
-    add_item(reorder, True, action="wl_reorder", **kw)
-    pin = xbmcgui.ListItem(label="📌  Pin items")
-    pin.setArt({"icon": "DefaultFavourites.png"})
-    add_item(pin, True, action="wl_pinmode", **kw)
+def _add_folder_row(entry) -> None:
+    """Render one custom folder row in the unified My List order."""
+    label = f"📁  {entry['name']}  ({entry['count']})"
+    if entry.get("pinned"):
+        label = f"📌  {label}"
+    item = xbmcgui.ListItem(label=label)
+    item.setArt({"icon": "DefaultFolder.png"})
+    add_item(item, True, action="wl_folder", folder=entry["id"])
+
+
+def _options_button(folder_id) -> None:
+    """A single OK-driven '⚙ Options' row — the one entry point for New folder /
+    Reorder / Pin (and, inside a folder, Rename / Delete). Keeps a bare TV remote
+    (no context menu) able to manage the list without cluttering it with buttons."""
+    item = xbmcgui.ListItem(label="⚙  Options")
+    item.setArt({"icon": "DefaultAddonProgram.png"})
+    add_item(item, False, action="wl_options", **_folder_kw(folder_id))
 
 
 def watchlist() -> None:
-    """My List root: New-folder + manage buttons, the custom folders, then titles."""
+    """My List root: an Options row, then folders and titles in one unified order."""
     xbmcgui.Window(10000).clearProperty(REORDER_PROP)  # leaving any reorder session
-    folders = db.list_folders()
-    rows = db.list_watchlist()  # root (folder_id IS NULL)
+    entries = db.list_root_entries()
 
-    nf = xbmcgui.ListItem(label="＋  New folder")
-    nf.setArt({"icon": "DefaultAddSource.png"})
-    add_item(nf, False, action="wl_newfolder")
-
-    if not folders and not rows:
-        item = xbmcgui.ListItem(label="Your list is empty — add titles from any movie or show")
-        add_item(item, False, action="noop")
+    if not entries:
+        nf = xbmcgui.ListItem(label="＋  New folder")
+        nf.setArt({"icon": "DefaultAddSource.png"})
+        add_item(nf, False, action="wl_newfolder")
+        add_item(xbmcgui.ListItem(
+            label="Your list is empty — add titles from any movie or show"),
+            False, action="noop")
         finish()
         return
 
-    _manage_buttons(None)
-    for f in folders:
-        item = xbmcgui.ListItem(label=f"📁  {f['name']}  ({f['count']})")
-        item.setArt({"icon": "DefaultFolder.png"})
-        item.addContextMenuItems([
-            ("Rename folder", f"RunPlugin({build_url(action='wl_renamefolder', folder=f['id'])})"),
-            ("Delete folder", f"RunPlugin({build_url(action='wl_delfolder', folder=f['id'])})")])
-        add_item(item, True, action="wl_folder", folder=f["id"])
-
-    for row in rows:
-        _add_watchlist_row(row)
+    _options_button(None)
+    for e in entries:
+        if e["kind"] == "folder":
+            _add_folder_row(e)
+        else:
+            _add_watchlist_row(e)
     finish("movies")
 
 
 def wl_folder(folder_id: int) -> None:
     """Contents of one custom folder."""
     xbmcgui.Window(10000).clearProperty(REORDER_PROP)  # leaving any reorder session
+    _options_button(folder_id)
     rows = db.list_watchlist(folder_id)
     if not rows:
-        item = xbmcgui.ListItem(label="Empty folder — add titles here, or move them in")
-        add_item(item, False, action="noop")
+        add_item(xbmcgui.ListItem(label="Empty folder — add titles here, or move them in"),
+                 False, action="noop")
         finish()
         return
-    _manage_buttons(folder_id)
     for row in rows:
         _add_watchlist_row(row)
     finish("movies")
 
 
+def wl_options(folder_id=None) -> None:
+    """The Options popover. Root: New folder / Reorder / Pin items. Inside a
+    folder: Reorder / Pin items / Rename / Delete."""
+    kw = _folder_kw(folder_id)
+    if folder_id is None:
+        labels = ["＋  New folder", "⇅  Reorder", "📌  Pin items"]
+        keys = ["newfolder", "reorder", "pin"]
+    else:
+        labels = ["⇅  Reorder", "📌  Pin items", "✎  Rename folder", "🗑  Delete folder"]
+        keys = ["reorder", "pin", "rename", "delete"]
+    choice = xbmcgui.Dialog().contextmenu(labels)
+    if not (0 <= choice < len(keys)):
+        if HANDLE >= 0:
+            xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+    key = keys[choice]
+    if key == "newfolder":
+        wl_newfolder()
+    elif key == "reorder":
+        _go(build_url(action="wl_reorder", **kw))
+    elif key == "pin":
+        _go(build_url(action="wl_pinmode", **kw))
+    elif key == "rename":
+        wl_renamefolder(folder_id)
+    elif key == "delete":
+        _delete_folder_from_options(folder_id)
+
+
+def _delete_folder_from_options(folder_id) -> None:
+    """Delete the current folder (confirm), then return to the root — the folder
+    view we're standing in no longer exists to refresh."""
+    folder = db.get_folder(folder_id)
+    if folder and xbmcgui.Dialog().yesno(
+            "Delete folder", f"Delete “{folder['name']}” and its titles?",
+            yeslabel="Delete", nolabel="Cancel"):
+        db.delete_folder(folder_id)
+        xbmcgui.Dialog().notification("Torus", "Folder deleted", xbmcgui.NOTIFICATION_INFO)
+        _go(build_url(action="watchlist"))
+    elif HANDLE >= 0:
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+
+
+def _go(url) -> None:
+    """Close the transient directory the click opened and navigate to `url`."""
+    if HANDLE >= 0:
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+    xbmc.executebuiltin(f"Container.Update({url})")
+
+
 # --- My List: grab-and-place reorder + pin (OK-remote friendly) ------------
 def _reorder_entries(folder_id):
-    """Ordered (kind, key, name) entries for the reorder screen: folders (root
-    only) above titles, matching the normal My List layout."""
+    """Ordered (key, label) entries for the reorder screen, in the SAME unified
+    order as the list itself — folders and titles interleaved at root."""
     entries = []
     if folder_id is None:
-        for f in db.list_folders():
-            entries.append(("f", f"f:{f['id']}", f"📁  {f['name']}"))
-    for row in db.list_watchlist(folder_id):
-        name = row["name"] or row["imdb"]
-        if row.get("pinned"):
-            name = f"📌  {name}"
-        entries.append(("t", f"t:{row['imdb']}", name))
+        for e in db.list_root_entries():
+            label = f"📁  {e['name']}" if e["kind"] == "folder" else (e["name"] or e["imdb"])
+            if e.get("pinned"):
+                label = f"📌  {label}"
+            entries.append((e["key"], label))
+    else:
+        for row in db.list_watchlist(folder_id):
+            label = row["name"] or row["imdb"]
+            if row.get("pinned"):
+                label = f"📌  {label}"
+            entries.append((f"t:{row['imdb']}", label))
     return entries
 
 
@@ -510,7 +562,7 @@ def wl_reorder(folder_id=None) -> None:
         finish()
         return
 
-    for kind, key, name in entries:
+    for key, name in entries:
         if not grabbed:  # nothing held yet → every row is grabbable
             item = xbmcgui.ListItem(label=f"≡  {name}")
             add_item(item, False, action="wl_grab", key=key, **kw)
@@ -538,38 +590,29 @@ def wl_grabcancel(folder_id=None) -> None:
 
 
 def wl_drop(before, folder_id=None) -> None:
-    """Place the grabbed entry before `before` (a t:/f: key or __bottom__)."""
+    """Place the grabbed entry before `before` (a t:/f: key or __bottom__) in the
+    unified order. Folders and titles reorder freely against each other at root."""
     grabbed = xbmcgui.Window(10000).getProperty(REORDER_PROP)
     if grabbed:
-        kind, _, ident = grabbed.partition(":")
-        if kind == "t":
-            order = [r["imdb"] for r in db.list_watchlist(folder_id) if r["imdb"] != ident]
-            order.insert(_drop_index(order, before, "t", lambda x: x), ident)
-            db.set_watchlist_order(order)
-        elif kind == "f" and folder_id is None:
-            order = [f["id"] for f in db.list_folders() if str(f["id"]) != ident]
-            order.insert(_drop_index(order, before, "f", lambda x: str(x)), int(ident))
-            db.set_folder_order(order)
+        if folder_id is None:  # unified root: folders + titles in one sequence
+            order = [e["key"] for e in db.list_root_entries() if e["key"] != grabbed]
+            order.insert(_drop_index(order, before), grabbed)
+            db.set_root_order(order)
+        else:  # inside a folder: titles only
+            keys = [f"t:{r['imdb']}" for r in db.list_watchlist(folder_id)]
+            order = [k for k in keys if k != grabbed]
+            order.insert(_drop_index(order, before), grabbed)
+            db.set_watchlist_order([k.partition(":")[2] for k in order])
     xbmcgui.Window(10000).clearProperty(REORDER_PROP)
     _refresh_container()
 
 
-def _drop_index(order, before, kind, ident_of) -> int:
-    """Insertion index into `order` for a `before` target. A same-kind target
-    inserts right before it; a different-kind target or __bottom__ clamps to the
-    top/bottom of this kind's block."""
+def _drop_index(order, before) -> int:
+    """Insertion index into `order` (a list of keys) for a `before` key target;
+    __bottom__ (or a missing target) appends at the end."""
     if before == "__bottom__":
         return len(order)
-    bkind, _, bident = before.partition(":")
-    if bkind != kind:
-        # dropped onto the other block: folders sit above titles, so a title
-        # dropped on a folder goes to the top; a folder dropped on a title goes
-        # to the bottom of the folders.
-        return 0 if kind == "t" else len(order)
-    for i, entry in enumerate(order):
-        if ident_of(entry) == bident:
-            return i
-    return len(order)
+    return order.index(before) if before in order else len(order)
 
 
 def wl_reorder_done(folder_id=None) -> None:
@@ -579,23 +622,30 @@ def wl_reorder_done(folder_id=None) -> None:
 
 # --- My List: pin mode -----------------------------------------------------
 def wl_pinmode(folder_id=None) -> None:
-    """Pin toggle screen: OK on a title pins/unpins it (pinned float to the top)."""
+    """Pin toggle screen: OK on an entry pins/unpins it. Pinning anchors an item
+    to its current slot (it does NOT float to the top). Root lists folders +
+    titles; a folder can be pinned too."""
     kw = _folder_kw(folder_id)
     add_item(xbmcgui.ListItem(label="✓  Done"), False, action="wl_pinmode_done", **kw)
-    rows = db.list_watchlist(folder_id)
-    if not rows:
-        add_item(xbmcgui.ListItem(label="No titles here to pin"), False, action="noop")
+    entries = _reorder_entries(folder_id)  # same unified order, same keys
+    if not entries:
+        add_item(xbmcgui.ListItem(label="Nothing here to pin"), False, action="noop")
         finish()
         return
-    for row in rows:
-        mark = "📌" if row.get("pinned") else "☆"
-        item = xbmcgui.ListItem(label=f"{mark}  {row['name'] or row['imdb']}")
-        add_item(item, False, action="wl_pintoggle", imdb=row["imdb"], **kw)
+    for key, label in entries:
+        # _reorder_entries already prefixes a 📌 for pinned rows; show ☆ otherwise
+        mark = "" if label.startswith("📌") else "☆  "
+        item = xbmcgui.ListItem(label=f"{mark}{label}")
+        add_item(item, False, action="wl_pintoggle", key=key, **kw)
     finish()
 
 
-def wl_pintoggle(imdb, folder_id=None) -> None:
-    db.set_pinned(imdb, not db.is_pinned(imdb))
+def wl_pintoggle(key, folder_id=None) -> None:
+    kind, _, ident = key.partition(":")
+    if kind == "f":
+        db.set_folder_pinned(ident, not db.is_folder_pinned(ident))
+    else:
+        db.set_pinned(ident, not db.is_pinned(ident))
     _refresh_container()
 
 
@@ -959,10 +1009,12 @@ def router(query_string: str) -> None:
         wl_delfolder(int(params["folder"]))
     elif action == "wl_remove":
         wl_remove(params.get("imdb", ""))
-    elif action in ("wl_reorder", "wl_grab", "wl_grabcancel", "wl_drop",
+    elif action in ("wl_options", "wl_reorder", "wl_grab", "wl_grabcancel", "wl_drop",
                     "wl_reorder_done", "wl_pinmode", "wl_pintoggle", "wl_pinmode_done"):
         folder_id = int(params["folder"]) if params.get("folder") else None
-        if action == "wl_reorder":
+        if action == "wl_options":
+            wl_options(folder_id)
+        elif action == "wl_reorder":
             wl_reorder(folder_id)
         elif action == "wl_grab":
             wl_grab(params.get("key", ""), folder_id)
@@ -975,7 +1027,7 @@ def router(query_string: str) -> None:
         elif action == "wl_pinmode":
             wl_pinmode(folder_id)
         elif action == "wl_pintoggle":
-            wl_pintoggle(params.get("imdb", ""), folder_id)
+            wl_pintoggle(params.get("key", ""), folder_id)
         elif action == "wl_pinmode_done":
             wl_pinmode_done(folder_id)
     elif action == "noop":

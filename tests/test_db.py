@@ -70,16 +70,35 @@ def test_new_titles_appear_newest_first(tmp_profile):
     assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt2", "tt1"]
 
 
-def test_pin_floats_to_top(tmp_profile):
+def test_pin_does_not_move_item(tmp_profile):
     for i in range(1, 4):
         db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
-    # order is tt3, tt2, tt1; pin the bottom one
+    # order is tt3, tt2, tt1; pinning tt1 must NOT float it to the top
     db.set_pinned("tt1", True)
     assert db.is_pinned("tt1")
-    assert [r["imdb"] for r in db.list_watchlist()][0] == "tt1"
-    assert db.list_watchlist()[0]["pinned"] == 1
-    db.set_pinned("tt1", False)
     assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt2", "tt1"]
+    assert db.list_watchlist()[-1]["pinned"] == 1
+
+
+def test_pin_anchors_index_when_adding(tmp_profile):
+    # tt3 pinned at the top holds index 0 as new titles arrive
+    for i in range(1, 4):
+        db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)   # tt3, tt2, tt1
+    db.set_pinned("tt3", True)
+    db.add_watchlist("tt4", "movie", "M4", "", None)
+    # new title flows to the topmost UNPINNED slot; tt3 stays put
+    assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt4", "tt2", "tt1"]
+
+
+def test_midlist_pin_holds_index_neighbor_falls_through(tmp_profile):
+    for i in range(1, 5):
+        db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    db.set_watchlist_order(["tt1", "tt2", "tt3", "tt4"])
+    db.set_pinned("tt2", True)                        # pinned at index 1
+    db.add_watchlist("tt5", "movie", "M5", "", None)  # new goes to top
+    order = [r["imdb"] for r in db.list_watchlist()]
+    assert order.index("tt2") == 1                    # pin holds its slot
+    assert order == ["tt5", "tt2", "tt1", "tt3", "tt4"]  # tt1 fell through the pin
 
 
 def test_set_watchlist_order_persists(tmp_profile):
@@ -89,20 +108,33 @@ def test_set_watchlist_order_persists(tmp_profile):
     assert [r["imdb"] for r in db.list_watchlist()] == ["tt1", "tt3", "tt2"]
 
 
-def test_pinned_beats_manual_order(tmp_profile):
-    for i in range(1, 4):
-        db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
-    db.set_watchlist_order(["tt1", "tt2", "tt3"])
-    db.set_pinned("tt3", True)                       # pinned floats above order
-    assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt1", "tt2"]
-
-
 def test_set_folder_order_persists(tmp_profile):
     a = db.create_folder("A")
     b = db.create_folder("B")
     c = db.create_folder("C")
     db.set_folder_order([c, a, b])
     assert [f["id"] for f in db.list_folders()] == [c, a, b]
+
+
+def test_root_entries_interleave_folders_and_titles(tmp_profile):
+    db.add_watchlist("a", "movie", "A", "", None)
+    fid = db.create_folder("Fold")
+    db.add_watchlist("b", "movie", "B", "", None)
+    # newest-on-top default: b, folder, a
+    assert [e["key"] for e in db.list_root_entries()] == ["t:b", f"f:{fid}", "t:a"]
+    # a folder can be reordered to sit between two titles
+    db.set_root_order(["t:b", f"f:{fid}", "t:a"])
+    keys = [e["key"] for e in db.list_root_entries()]
+    assert keys == ["t:b", f"f:{fid}", "t:a"]
+    assert keys[1].startswith("f:")   # folder between the two titles
+
+
+def test_folder_pin_toggle(tmp_profile):
+    fid = db.create_folder("Fold")
+    assert db.is_folder_pinned(fid) is False
+    db.set_folder_pinned(fid, True)
+    assert db.is_folder_pinned(fid) is True
+    assert db.list_folders()[0]["pinned"] == 1
 
 
 # --- resume / Continue Watching -------------------------------------------

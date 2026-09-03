@@ -96,6 +96,7 @@ _xbmcgui.INPUT_ALPHANUM = 0
 class _Dialog:
     def notification(self, *a, **k): pass
     def select(self, *a, **k): return -1
+    def contextmenu(self, *a, **k): return -1
     def input(self, *a, **k): return ""
     def yesno(self, *a, **k): return False
     def ok(self, *a, **k): pass

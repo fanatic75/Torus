@@ -99,6 +99,58 @@ def test_torbox_play_requires_token(kodi, monkeypatch):
     assert kodi.resolved[-1]["ok"] is False
 
 
+# --- Continue Watching popover (cw_menu) ----------------------------------
+def test_continue_watching_opens_popover_not_direct_play(kodi, monkeypatch):
+    monkeypatch.setattr(main.db, "list_continue", lambda: [
+        {"imdb": "tt1", "mtype": "movie", "name": "Movie", "poster": "p.jpg"}])
+    main.continue_watching()
+    it = kodi.items[-1]
+    assert it["folder"] is False
+    assert "action=cw_menu" in it["url"]          # click opens the popover
+    assert "action=play" not in it["url"]         # not a one-click resolve
+    assert it["item"].getProperty("IsPlayable") == ""  # no direct playback
+
+
+def _capture_builtins(monkeypatch):
+    calls = []
+    monkeypatch.setattr(main.xbmc, "executebuiltin", lambda cmd, *a, **k: calls.append(cmd))
+    return calls
+
+
+def _dialog_returning(monkeypatch, choice):
+    class _D:
+        def contextmenu(self, *a, **k): return choice
+    monkeypatch.setattr(main.xbmcgui, "Dialog", lambda: _D())
+
+
+def test_cw_menu_play_resolves_best_source(kodi, monkeypatch):
+    calls = _capture_builtins(monkeypatch)
+    _dialog_returning(monkeypatch, 0)  # "Play"
+    main.cw_menu("tt1", "series", 2, 5)
+    assert len(calls) == 1
+    cmd = calls[0]
+    assert cmd.startswith("PlayMedia(")
+    assert "action=play" in cmd and "imdb=tt1" in cmd
+    assert "season=2" in cmd and "episode=5" in cmd
+
+
+def test_cw_menu_choose_source_opens_source_list(kodi, monkeypatch):
+    calls = _capture_builtins(monkeypatch)
+    _dialog_returning(monkeypatch, 1)  # "Choose source"
+    main.cw_menu("tt1", "movie", 0, 0)
+    assert len(calls) == 1
+    cmd = calls[0]
+    assert cmd.startswith("Container.Update(")
+    assert "action=sources" in cmd and "imdb=tt1" in cmd
+
+
+def test_cw_menu_cancel_does_nothing(kodi, monkeypatch):
+    calls = _capture_builtins(monkeypatch)
+    _dialog_returning(monkeypatch, -1)  # dismissed
+    main.cw_menu("tt1", "movie", 0, 0)
+    assert calls == []
+
+
 # --- stop-current-on-new-pick (movie-switch bug) --------------------------
 def test_fresh_movie_pick_stops_current(kodi):
     kodi.player["playing"] = True

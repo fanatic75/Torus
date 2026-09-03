@@ -226,15 +226,32 @@ def continue_watching() -> None:
             label = f"▶ Up Next — {label}"
         item = xbmcgui.ListItem(label=label)
         item.setArt({"poster": poster, "thumb": poster})
-        item.setProperty("IsPlayable", "true")
+        # Not IsPlayable: a click opens the Play / Choose source popover (cw_menu)
+        # rather than resolving a stream straight away.
         tag = item.getVideoInfoTag()
         tag.setMediaType("movie" if row.get("mtype") == "movie" else "episode")
         tag.setTitle(row.get("name") or "")
         item.addContextMenuItems(_choose_source_ctx(
             row["imdb"], row.get("mtype", "movie"), row.get("season", 0), row.get("episode", 0)))
-        add_item(item, False, action="play", imdb=row["imdb"], mtype=row.get("mtype", "movie"),
+        add_item(item, False, action="cw_menu", imdb=row["imdb"], mtype=row.get("mtype", "movie"),
                  season=row.get("season", 0), episode=row.get("episode", 0))
     finish()
+
+
+def cw_menu(imdb, mtype="movie", season_number=0, episode_number=0) -> None:
+    """Popover for a Continue Watching row: Play (one-click resume of the best
+    source) or Choose source (open the ranked source list; picking one resumes)."""
+    choice = xbmcgui.Dialog().contextmenu(["▶  Play", "☰  Choose source"])
+    if choice == 0:
+        url = build_url(action="play", imdb=imdb, mtype=mtype,
+                        season=season_number, episode=episode_number)
+        xbmc.executebuiltin(f"PlayMedia({url})")
+    elif choice == 1:
+        url = build_url(action="sources", imdb=imdb, mtype=mtype,
+                        season=season_number, episode=episode_number)
+        xbmc.executebuiltin(f"Container.Update({url})")
+    if HANDLE >= 0:  # close the transient directory the click opened
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
 
 
 # --- sources + playback ----------------------------------------------------
@@ -745,6 +762,13 @@ def router(query_string: str) -> None:
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
     elif action == "continue":
         continue_watching()
+    elif action == "cw_menu":
+        cw_menu(
+            params.get("imdb", ""),
+            params.get("mtype", "movie"),
+            int(params["season"]) if params.get("season") else 0,
+            int(params["episode"]) if params.get("episode") else 0,
+        )
     elif action == "torbox_list":
         torbox_list()
     elif action == "torbox_files":

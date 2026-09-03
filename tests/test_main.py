@@ -151,6 +151,100 @@ def test_cw_menu_cancel_does_nothing(kodi, monkeypatch):
     assert calls == []
 
 
+# --- My List: manage buttons, reorder (grab & place), pin -----------------
+def _urls(kodi):
+    return [it["url"] for it in kodi.items]
+
+
+def test_watchlist_shows_manage_buttons_when_nonempty(kodi, tmp_profile):
+    main.db.add_watchlist("tt1", "movie", "M", "", None)
+    main.watchlist()
+    urls = " ".join(_urls(kodi))
+    assert "action=wl_reorder" in urls
+    assert "action=wl_pinmode" in urls
+    assert "action=wl_newfolder" in urls
+
+
+def test_empty_watchlist_has_no_manage_buttons(kodi, tmp_profile):
+    main.watchlist()
+    urls = " ".join(_urls(kodi))
+    assert "action=wl_reorder" not in urls and "action=wl_pinmode" not in urls
+
+
+def test_reorder_screen_rows_are_grabbable_when_idle(kodi, tmp_profile):
+    for i in (1, 2):
+        main.db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    main.wl_reorder(None)
+    urls = _urls(kodi)
+    assert any("action=wl_reorder_done" in u for u in urls)   # Done row
+    assert sum("action=wl_grab" in u and "grabcancel" not in u for u in urls) == 2
+
+
+def test_grab_sets_state_then_rows_become_drop_targets(kodi, tmp_profile):
+    for i in (1, 2, 3):
+        main.db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    main.wl_grab("t:tt2", None)
+    assert kodi.win[main.REORDER_PROP] == "t:tt2"
+    main.wl_reorder(None)
+    urls = _urls(kodi)
+    assert any("action=wl_grabcancel" in u for u in urls)         # the held row
+    assert any("before=__bottom__" in u for u in urls)            # bottom target
+    assert sum("action=wl_drop" in u for u in urls) == 3          # 2 rows + bottom
+
+
+def test_drop_reorders_title_before_target(kodi, tmp_profile):
+    for i in (1, 2, 3):
+        main.db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    # display order is tt3, tt2, tt1 (newest first). Grab tt1, drop before tt3 (top).
+    main.wl_grab("t:tt1", None)
+    main.wl_drop("t:tt3", None)
+    assert [r["imdb"] for r in main.db.list_watchlist()] == ["tt1", "tt3", "tt2"]
+    assert kodi.win.get(main.REORDER_PROP, "") == ""             # grab cleared
+
+
+def test_drop_to_bottom(kodi, tmp_profile):
+    for i in (1, 2, 3):
+        main.db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    main.wl_grab("t:tt3", None)          # tt3 is currently at the top
+    main.wl_drop("__bottom__", None)
+    assert [r["imdb"] for r in main.db.list_watchlist()] == ["tt2", "tt1", "tt3"]
+
+
+def test_drop_reorders_folders(kodi, tmp_profile):
+    a = main.db.create_folder("A")
+    b = main.db.create_folder("B")
+    c = main.db.create_folder("C")           # order A, B, C
+    main.wl_grab(f"f:{c}", None)
+    main.wl_drop(f"f:{a}", None)             # move C before A
+    assert [f["id"] for f in main.db.list_folders()] == [c, a, b]
+
+
+def test_grabcancel_clears_state(kodi, tmp_profile):
+    main.db.add_watchlist("tt1", "movie", "M", "", None)
+    main.wl_grab("t:tt1", None)
+    main.wl_grabcancel(None)
+    assert kodi.win.get(main.REORDER_PROP, "") == ""
+
+
+def test_entering_watchlist_clears_stale_grab(kodi, tmp_profile):
+    main.db.add_watchlist("tt1", "movie", "M", "", None)
+    kodi.win[main.REORDER_PROP] = "t:tt1"
+    main.watchlist()
+    assert kodi.win.get(main.REORDER_PROP, "") == ""
+
+
+def test_pinmode_lists_toggles_and_toggle_flips(kodi, tmp_profile):
+    main.db.add_watchlist("tt1", "movie", "M1", "", None)
+    main.wl_pinmode(None)
+    urls = _urls(kodi)
+    assert any("action=wl_pinmode_done" in u for u in urls)
+    assert any("action=wl_pintoggle" in u and "imdb=tt1" in u for u in urls)
+    main.wl_pintoggle("tt1", None)
+    assert main.db.is_pinned("tt1") is True
+    main.wl_pintoggle("tt1", None)
+    assert main.db.is_pinned("tt1") is False
+
+
 # --- stop-current-on-new-pick (movie-switch bug) --------------------------
 def test_fresh_movie_pick_stops_current(kodi):
     kodi.player["playing"] = True

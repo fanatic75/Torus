@@ -62,6 +62,49 @@ def test_delete_folder_cascades(tmp_profile):
     assert db.in_watchlist("tt10")      # others untouched
 
 
+# --- pinning + manual order ------------------------------------------------
+def test_new_titles_appear_newest_first(tmp_profile):
+    db.add_watchlist("tt1", "movie", "First", "", None)
+    db.add_watchlist("tt2", "movie", "Second", "", None)
+    db.add_watchlist("tt3", "movie", "Third", "", None)
+    assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt2", "tt1"]
+
+
+def test_pin_floats_to_top(tmp_profile):
+    for i in range(1, 4):
+        db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    # order is tt3, tt2, tt1; pin the bottom one
+    db.set_pinned("tt1", True)
+    assert db.is_pinned("tt1")
+    assert [r["imdb"] for r in db.list_watchlist()][0] == "tt1"
+    assert db.list_watchlist()[0]["pinned"] == 1
+    db.set_pinned("tt1", False)
+    assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt2", "tt1"]
+
+
+def test_set_watchlist_order_persists(tmp_profile):
+    for i in range(1, 4):
+        db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    db.set_watchlist_order(["tt1", "tt3", "tt2"])
+    assert [r["imdb"] for r in db.list_watchlist()] == ["tt1", "tt3", "tt2"]
+
+
+def test_pinned_beats_manual_order(tmp_profile):
+    for i in range(1, 4):
+        db.add_watchlist(f"tt{i}", "movie", f"M{i}", "", None)
+    db.set_watchlist_order(["tt1", "tt2", "tt3"])
+    db.set_pinned("tt3", True)                       # pinned floats above order
+    assert [r["imdb"] for r in db.list_watchlist()] == ["tt3", "tt1", "tt2"]
+
+
+def test_set_folder_order_persists(tmp_profile):
+    a = db.create_folder("A")
+    b = db.create_folder("B")
+    c = db.create_folder("C")
+    db.set_folder_order([c, a, b])
+    assert [f["id"] for f in db.list_folders()] == [c, a, b]
+
+
 # --- resume / Continue Watching -------------------------------------------
 def test_progress_save_get_clear(tmp_profile):
     db.save_progress("tt1", "movie", 0, 0, 300, 1000, "M", "p", "url")

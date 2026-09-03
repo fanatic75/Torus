@@ -56,10 +56,20 @@ def _connect() -> sqlite3.Connection:
             created_at INTEGER NOT NULL
         )
     """)
-    try:  # migrate older DBs that predate folders
-        conn.execute("ALTER TABLE watchlist ADD COLUMN folder_id INTEGER")
-    except sqlite3.OperationalError:
-        pass
+    # Best-effort migrations for older DBs. Each ALTER is independent so a column
+    # that already exists (OperationalError) doesn't block the others.
+    for stmt in (
+        "ALTER TABLE watchlist ADD COLUMN folder_id INTEGER",
+        # pinned titles float to the top of their container; position is the
+        # manual order (lower = higher up) set by grab-and-place reordering.
+        "ALTER TABLE watchlist ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE watchlist ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE folders ADD COLUMN position INTEGER NOT NULL DEFAULT 0",
+    ):
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 
@@ -136,10 +146,16 @@ def clear_progress(imdb, season=0, episode=0) -> None:
 def add_watchlist(imdb, mtype, name="", poster="", folder_id=None) -> None:
     conn = _connect()
     try:
+        # New titles land at the top of their container (position below the
+        # current minimum), matching the previous newest-first behaviour.
+        top = conn.execute(
+            "SELECT COALESCE(MIN(position), 0) - 1 FROM watchlist WHERE folder_id IS ?",
+            (folder_id,)).fetchone()[0]
         conn.execute(
-            "INSERT OR REPLACE INTO watchlist (imdb, mtype, name, poster, folder_id, added_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (imdb, mtype, name, poster, folder_id, int(time.time())))
+            "INSERT OR REPLACE INTO watchlist "
+            "(imdb, mtype, name, poster, folder_id, pinned, position, added_at) "
+            "VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+            (imdb, mtype, name, poster, folder_id, top, int(time.time())))
         conn.commit()
     finally:
         conn.close()
@@ -164,8 +180,10 @@ def create_folder(name) -> int | None:
         existing = _folder_id_by_name(conn, name)
         if existing is not None:
             return existing
-        cur = conn.execute("INSERT INTO folders (name, created_at) VALUES (?, ?)",
-                           (name, int(time.time())))
+        cur = conn.execute(
+            "INSERT INTO folders (name, created_at, position) "
+            "VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM folders))",
+            (name, int(time.time())))
         conn.commit()
         return cur.lastrowid
     finally:
@@ -199,7 +217,7 @@ def list_folders() -> list[dict]:
             FROM folders f
             LEFT JOIN watchlist w ON w.folder_id = f.id
             GROUP BY f.id, f.name
-            ORDER BY f.name COLLATE NOCASE
+            ORDER BY f.position ASC, f.name COLLATE NOCASE
         """).fetchall()
     finally:
         conn.close()
@@ -265,19 +283,57 @@ def list_watchlist(folder_id=None, limit=300) -> list[dict]:
     """Titles in a folder. folder_id None = root (top-level, un-foldered) items."""
     conn = _connect()
     try:
-        if folder_id is None:
-            rows = conn.execute(
-                "SELECT imdb, mtype, name, poster FROM watchlist "
-                "WHERE folder_id IS NULL ORDER BY added_at DESC LIMIT ?",
-                (limit,)).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT imdb, mtype, name, poster FROM watchlist "
-                "WHERE folder_id=? ORDER BY added_at DESC LIMIT ?",
-                (folder_id, limit)).fetchall()
+        # Pinned first, then manual order (position), newest as the final tiebreak.
+        rows = conn.execute(
+            "SELECT imdb, mtype, name, poster, pinned FROM watchlist "
+            "WHERE folder_id IS ? "
+            "ORDER BY pinned DESC, position ASC, added_at DESC LIMIT ?",
+            (folder_id, limit)).fetchall()
     finally:
         conn.close()
-    return [dict(zip(("imdb", "mtype", "name", "poster"), r)) for r in rows]
+    return [dict(zip(("imdb", "mtype", "name", "poster", "pinned"), r)) for r in rows]
+
+
+def set_pinned(imdb, pinned: bool) -> None:
+    """Pin/unpin a watchlist title. Pinned titles float to the top of their folder."""
+    conn = _connect()
+    try:
+        conn.execute("UPDATE watchlist SET pinned=? WHERE imdb=?",
+                     (1 if pinned else 0, imdb))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_pinned(imdb) -> bool:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT pinned FROM watchlist WHERE imdb=?", (imdb,)).fetchone()
+    finally:
+        conn.close()
+    return bool(row and row[0])
+
+
+def set_watchlist_order(ordered_imdbs) -> None:
+    """Assign positions 0..n to the given titles, in the order provided."""
+    conn = _connect()
+    try:
+        for i, imdb in enumerate(ordered_imdbs):
+            conn.execute("UPDATE watchlist SET position=? WHERE imdb=?", (i, imdb))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_folder_order(ordered_ids) -> None:
+    """Assign positions 0..n to the given folders, in the order provided."""
+    conn = _connect()
+    try:
+        for i, fid in enumerate(ordered_ids):
+            conn.execute("UPDATE folders SET position=? WHERE id=?", (i, int(fid)))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 RETENTION_DAYS = 365

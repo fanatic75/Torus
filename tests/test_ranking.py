@@ -1,4 +1,4 @@
-from resources.lib.ranking import rank, score
+from resources.lib.ranking import rank, score, is_open_matte, open_matte_first
 from resources.lib.providers.base import Stream
 
 
@@ -59,3 +59,23 @@ def test_no_expected_is_quality_only():
     a = Stream(title="X 2160p", url="a", raw_name="X 2160p")
     b = Stream(title="X 1080p", url="b", raw_name="X 1080p")
     assert rank([b, a])[0].url == "a"   # unchanged legacy behaviour
+
+
+# --- Open Matte: float full-frame cuts to the top of the source list ----------
+def test_is_open_matte_variants():
+    assert is_open_matte(s("Movie.2001.1080p.Open.Matte.WEB-DL"))
+    assert is_open_matte(s("Movie 2001 OpenMatte BluRay"))
+    assert is_open_matte(s("Movie.2001.open-matte.x264"))
+    assert not is_open_matte(s("Movie.2001.2160p.REMUX-FraMeSToR"))
+
+
+def test_open_matte_first_is_stable():
+    ranked = [s("A 2160p REMUX"), s("B 1080p Open Matte"),
+              s("C 1080p BluRay"), s("D 720p OpenMatte")]
+    out = open_matte_first(ranked)
+    assert [x.title[0] for x in out] == ["B", "D", "A", "C"]  # OM first, order kept in each group
+
+
+def test_open_matte_first_noop_without_matches():
+    ranked = [s("A 2160p"), s("B 1080p")]
+    assert open_matte_first(ranked) == ranked

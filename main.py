@@ -294,6 +294,8 @@ def sources(imdb: str, mtype: str, season_number=None, episode_number=None) -> N
     provider = providers.get_provider()
     streams = ranking.rank(provider.search(imdb, mtype, season_number, episode_number),
                            expected=expected, series=(mtype == "series"))
+    if mtype == "movie":  # offer the Open Matte (full-frame) cut first, order otherwise kept
+        streams = ranking.open_matte_first(streams)
     if not streams:
         notify("No cached sources found")
 

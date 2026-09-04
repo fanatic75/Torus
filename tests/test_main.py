@@ -156,6 +156,45 @@ def test_cw_menu_cancel_does_nothing(kodi, monkeypatch):
     assert calls == []
 
 
+# --- Choose source: Open Matte first for movies ---------------------------
+def _mock_sources(monkeypatch, streams):
+    from resources.lib.providers.base import Stream  # noqa: F401
+    monkeypatch.setattr(main.config, "torbox_token", lambda: "KEY")
+    monkeypatch.setattr(main.cinemeta, "meta", lambda *a, **k: {"name": "Show"})
+    monkeypatch.setattr(main.providers, "get_provider", lambda: type(
+        "P", (), {"search": lambda self, *a, **k: list(streams)})())
+    monkeypatch.setattr(main.ranking, "rank", lambda st, **k: list(st))  # keep given order
+
+
+def _titles(kodi):
+    import urllib.parse as up
+    out = []
+    for it in kodi.items:
+        q = dict(up.parse_qsl(it["url"].split("?", 1)[1]))
+        if q.get("action") == "play":
+            out.append(q.get("title", ""))
+    return out
+
+
+def test_movie_choose_source_floats_open_matte_first(kodi, monkeypatch):
+    from resources.lib.providers.base import Stream
+    streams = [Stream("A 2160p REMUX", "u1", raw_name="A 2160p REMUX"),
+               Stream("B 1080p Open Matte", "u2", raw_name="B 1080p Open Matte"),
+               Stream("C 1080p BluRay", "u3", raw_name="C 1080p BluRay")]
+    _mock_sources(monkeypatch, streams)
+    main.sources("tt1", "movie", None, None)
+    assert _titles(kodi) == ["B 1080p Open Matte", "A 2160p REMUX", "C 1080p BluRay"]
+
+
+def test_series_choose_source_unchanged(kodi, monkeypatch):
+    from resources.lib.providers.base import Stream
+    streams = [Stream("A S01E01 2160p", "u1", raw_name="A S01E01 2160p"),
+               Stream("B S01E01 Open Matte", "u2", raw_name="B S01E01 Open Matte")]
+    _mock_sources(monkeypatch, streams)
+    main.sources("tt1", "series", 1, 1)
+    assert _titles(kodi) == ["A S01E01 2160p", "B S01E01 Open Matte"]  # order untouched
+
+
 # --- My List: manage buttons, reorder (grab & place), pin -----------------
 def _urls(kodi):
     return [it["url"] for it in kodi.items]

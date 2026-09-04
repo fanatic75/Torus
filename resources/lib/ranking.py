@@ -14,6 +14,9 @@ from . import matching, release_groups
 from .providers.base import Stream
 
 _DV = re.compile(r"(?<![a-z])dv(?![a-z])")
+# "Open Matte" releases expose the full (un-cropped) frame; matches OpenMatte,
+# open.matte, open-matte, open_matte, "open matte".
+_OPEN_MATTE = re.compile(r"open[\s._-]*matte", re.IGNORECASE)
 
 
 def score(stream: Stream) -> int:
@@ -81,3 +84,18 @@ def rank(streams: list[Stream], expected: str = "", series: bool = False) -> lis
         key=lambda s: (matching.matches(s.title or s.raw_name, expected, series), score(s)),
         reverse=True,
     )
+
+
+def is_open_matte(stream: Stream) -> bool:
+    """True when a release advertises an Open Matte (un-cropped, full-frame) cut."""
+    text = " ".join(t for t in (stream.title, stream.raw_name, stream.raw_description) if t)
+    return bool(_OPEN_MATTE.search(text))
+
+
+def open_matte_first(streams: list[Stream]) -> list[Stream]:
+    """Stable partition of an already-ranked list: Open Matte releases float to the
+    top, everything else keeps its existing order. Used by the movie Choose-source
+    screen so the un-cropped cut is offered first without disturbing the rest."""
+    open_matte = [s for s in streams if is_open_matte(s)]
+    rest = [s for s in streams if not is_open_matte(s)]
+    return open_matte + rest

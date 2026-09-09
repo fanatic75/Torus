@@ -46,7 +46,7 @@ class TorrentioProvider(Provider):
     def search(self, imdb_id, media_type, season=None, episode=None) -> list[Stream]:
         stream_id = self._stream_id(imdb_id, media_type, season, episode)
         url = f"{self.host}/{self._config_segment()}/stream/{media_type}/{stream_id}.json"
-        data = get_json(url, timeout=45)
+        data = get_json(url, timeout=15)  # cached-source search; fail fast if the host stalls
         streams = []
         for item in data.get("streams", []):
             play_url = item.get("url")

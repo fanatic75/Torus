@@ -83,7 +83,9 @@ class CometProvider(Provider):
     def search(self, imdb_id, media_type, season=None, episode=None) -> list[Stream]:
         stream_id = self._stream_id(imdb_id, media_type, season, episode)
         url = f"{self.host}/{self._config_segment()}/stream/{media_type}/{stream_id}.json"
-        data = get_json(url, timeout=60)
+        # A cached-source search should take a couple seconds; cap it low so a
+        # stalled host (elfhosted is prone to this) fails fast instead of hanging.
+        data = get_json(url, timeout=15)
         streams = []
         for item in data.get("streams", []):
             play_url = item.get("url")

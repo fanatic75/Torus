@@ -1,4 +1,7 @@
 """Provider parsing, merge/dedup, and the factory."""
+import threading
+import time
+
 from resources.lib.providers import comet, torrentio, MergedProvider, get_provider
 from resources.lib.providers.base import Provider, Stream
 from resources.lib import config
@@ -73,6 +76,50 @@ def test_merged_dedups_by_normalized_title():
 def test_merged_tolerates_a_failing_provider():
     merged = MergedProvider([_Boom(), _Fake([Stream("X 1080p", "u")])]).search("tt1", "movie")
     assert [s.title for s in merged] == ["X 1080p"]
+
+
+class _Hang(Provider):
+    """A provider that blocks (simulates elfhosted/Comet stalling for its full
+    timeout). `released` lets the test unblock the background thread so nothing
+    lingers after the assertions."""
+    def __init__(self):
+        self.released = threading.Event()
+
+    def search(self, *a, **k):
+        self.released.wait(timeout=30)
+        return [Stream("SLOW 2160p", "slow")]
+
+
+def test_merged_does_not_block_on_a_hanging_provider():
+    # REGRESSION: with provider="both", a dead/stalled provider must NOT hold up
+    # the working one — previously the merge waited for the slowest (~15-60s),
+    # so Play / Choose source appeared to do nothing. Now the fast provider's
+    # results come back immediately and the hung one is left behind.
+    fast = _Fake([Stream("FAST 1080p", "fast")])
+    hang = _Hang()
+    merged = MergedProvider([fast, hang], straggler_grace=0.3, search_timeout=5)
+
+    start = time.time()
+    streams = merged.search("tt1", "movie")
+    elapsed = time.time() - start
+    hang.released.set()  # let the background thread finish; nothing left hanging
+
+    assert [s.url for s in streams] == ["fast"]              # working provider's results
+    assert elapsed < 2, f"merge blocked {elapsed:.1f}s on the hung provider"
+
+
+def test_merged_still_waits_within_grace_for_a_slightly_slower_provider():
+    # A merely-slower (not dead) provider still gets merged, as long as it answers
+    # within the grace window — so we don't lose coverage when both are healthy.
+    class _SlowButAlive(Provider):
+        def search(self, *a, **k):
+            time.sleep(0.15)
+            return [Stream("B 2160p", "ub")]
+
+    merged = MergedProvider([_Fake([Stream("A 1080p", "ua")]), _SlowButAlive()],
+                            straggler_grace=1.0, search_timeout=5)
+    urls = {s.url for s in merged.search("tt1", "movie")}
+    assert urls == {"ua", "ub"}
 
 
 # --- factory ---------------------------------------------------------------
